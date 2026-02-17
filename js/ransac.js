@@ -253,8 +253,15 @@ function buildSurface(inlierPts, plane) {
     return [v.dot(t1), v.dot(t2)];
   });
 
-  // 2-D convex hull → back to 3-D
-  const hull2D = convexHull2D(pts2D);
+  // Density-filter: build a grid over the 2D projection and keep only cells
+  // that contain enough points.  This prevents sparse outlier inliers (e.g.
+  // the few floor/ceiling points that lie within distThreshold of the table
+  // plane) from pulling the convex hull far beyond the actual surface edge.
+  const densePts = occupancyFilter(pts2D);
+  if (densePts.length < 3) return null;
+
+  // 2-D convex hull of dense cells → back to 3-D
+  const hull2D = convexHull2D(densePts);
   if (hull2D.length < 3) return null;
 
   const hull3D = hull2D.map(([u, v]) =>
@@ -271,6 +278,63 @@ function buildSurface(inlierPts, plane) {
   }
 
   return { plane, normal, centroid, hull3D, tangent1: t1, tangent2: t2, area, pointCount: inlierPts.length };
+}
+
+// ─── Occupancy filter ─────────────────────────────────────────────────────────
+
+/**
+ * Grid-based density filter for 2-D projected inlier points.
+ *
+ * Divides the 2-D bounding box into a grid and returns the centre of every
+ * cell that contains at least `minPtsPerCell` points.  The convex hull of
+ * these cell centres is tightly clipped to the actual dense surface region,
+ * so isolated inlier outliers (e.g. a few floor points within distThreshold
+ * of the table plane) can no longer stretch the boundary across the room.
+ *
+ * @param {[number,number][]} pts2D
+ * @returns {[number,number][]}
+ */
+function occupancyFilter(pts2D) {
+  const n = pts2D.length;
+  if (n < 3) return pts2D;
+
+  // Bounding box
+  let uMin = Infinity, uMax = -Infinity, vMin = Infinity, vMax = -Infinity;
+  for (const [u, v] of pts2D) {
+    if (u < uMin) uMin = u;  if (u > uMax) uMax = u;
+    if (v < vMin) vMin = v;  if (v > vMax) vMax = v;
+  }
+  const uRange = uMax - uMin || 1e-6;
+  const vRange = vMax - vMin || 1e-6;
+
+  // Grid resolution: scale with point count so small surfaces (few inliers)
+  // don't end up with nearly empty cells, but cap at 50 for performance.
+  const gridRes = Math.min(50, Math.ceil(Math.sqrt(n / 3)));
+  const cellSize = Math.max(uRange, vRange) / gridRes;
+
+  const uCells = Math.ceil(uRange / cellSize) + 1;
+  const vCells = Math.ceil(vRange / cellSize) + 1;
+  const counts = new Int32Array(uCells * vCells);
+
+  for (const [u, v] of pts2D) {
+    const ci = Math.min(uCells - 1, Math.floor((u - uMin) / cellSize));
+    const cj = Math.min(vCells - 1, Math.floor((v - vMin) / cellSize));
+    counts[ci * vCells + cj]++;
+  }
+
+  // A cell must have at least 2 points to survive — enough to reject single
+  // stray inliers while keeping every genuinely populated cell.
+  const MIN_PTS = 2;
+  const out = [];
+  for (let i = 0; i < uCells; i++) {
+    for (let j = 0; j < vCells; j++) {
+      if (counts[i * vCells + j] >= MIN_PTS) {
+        out.push([uMin + (i + 0.5) * cellSize, vMin + (j + 0.5) * cellSize]);
+      }
+    }
+  }
+
+  return out.length >= 3 ? out : pts2D;  // fall back to raw if filter is too aggressive
 }
 
 // ─── 2-D Convex Hull (Andrew's monotone chain) ───────────────────────────────
