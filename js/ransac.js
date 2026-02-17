@@ -283,22 +283,28 @@ function buildSurface(inlierPts, plane) {
 // ─── Occupancy filter ─────────────────────────────────────────────────────────
 
 /**
- * Grid-based density filter for 2-D projected inlier points.
+ * Grid-based spatial-coherence filter for 2-D projected inlier points.
  *
- * Divides the 2-D bounding box into a grid and returns the centre of every
- * cell that contains at least `minPtsPerCell` points.  The convex hull of
- * these cell centres is tightly clipped to the actual dense surface region,
- * so isolated inlier outliers (e.g. a few floor points within distThreshold
- * of the table plane) can no longer stretch the boundary across the room.
+ * The previous density-threshold approach failed because the grid resolution
+ * scaled with point count, keeping per-cell density similar regardless of
+ * surface size — so stray outlier cells at the edge of a large plane were
+ * never reliably separated from real edge cells of a small surface.
+ *
+ * This version instead uses connected-component analysis (BFS) on the
+ * occupancy grid.  Real surface inliers form one large cluster; isolated
+ * stray inliers (a few floor/background points that happen to satisfy the
+ * table-plane equation) form tiny disconnected islands.  Keeping only the
+ * LARGEST component cleanly clips the hull to the actual dense region
+ * regardless of how dense that region is relative to the outliers.
  *
  * @param {[number,number][]} pts2D
- * @returns {[number,number][]}
+ * @returns {[number,number][]}  cell centres of the dominant component
  */
 function occupancyFilter(pts2D) {
   const n = pts2D.length;
   if (n < 3) return pts2D;
 
-  // Bounding box
+  // ── 1. Build bounding box ────────────────────────────────────────────────
   let uMin = Infinity, uMax = -Infinity, vMin = Infinity, vMax = -Infinity;
   for (const [u, v] of pts2D) {
     if (u < uMin) uMin = u;  if (u > uMax) uMax = u;
@@ -307,9 +313,11 @@ function occupancyFilter(pts2D) {
   const uRange = uMax - uMin || 1e-6;
   const vRange = vMax - vMin || 1e-6;
 
-  // Grid resolution: scale with point count so small surfaces (few inliers)
-  // don't end up with nearly empty cells, but cap at 50 for performance.
-  const gridRes = Math.min(50, Math.ceil(Math.sqrt(n / 3)));
+  // ── 2. Choose cell size ──────────────────────────────────────────────────
+  // Coarser than before: sqrt(n/10) keeps per-cell counts high enough that
+  // the ≥2-point threshold meaningfully separates strays from real cells,
+  // while still being fine enough to track surface boundaries accurately.
+  const gridRes = Math.min(40, Math.max(5, Math.ceil(Math.sqrt(n / 10))));
   const cellSize = Math.max(uRange, vRange) / gridRes;
 
   const uCells = Math.ceil(uRange / cellSize) + 1;
@@ -322,19 +330,61 @@ function occupancyFilter(pts2D) {
     counts[ci * vCells + cj]++;
   }
 
-  // A cell must have at least 2 points to survive — enough to reject single
-  // stray inliers while keeping every genuinely populated cell.
-  const MIN_PTS = 2;
-  const out = [];
-  for (let i = 0; i < uCells; i++) {
-    for (let j = 0; j < vCells; j++) {
-      if (counts[i * vCells + j] >= MIN_PTS) {
-        out.push([uMin + (i + 0.5) * cellSize, vMin + (j + 0.5) * cellSize]);
+  // ── 3. Occupancy mask (≥ 2 pts per cell) ────────────────────────────────
+  const occupied = new Uint8Array(uCells * vCells);
+  for (let k = 0; k < counts.length; k++) {
+    if (counts[k] >= 2) occupied[k] = 1;
+  }
+
+  // ── 4. BFS connected-component labelling (8-connected) ──────────────────
+  const labels    = new Int32Array(uCells * vCells).fill(-1);
+  const compSizes = [];   // component index → cell count
+
+  for (let seed = 0; seed < occupied.length; seed++) {
+    if (!occupied[seed] || labels[seed] !== -1) continue;
+
+    const label = compSizes.length;
+    compSizes.push(0);
+    const queue = [seed];
+    labels[seed] = label;
+
+    // Plain array queue is fine — grid is at most 41×41 = 1681 cells
+    let head = 0;
+    while (head < queue.length) {
+      const k  = queue[head++];
+      compSizes[label]++;
+      const ci = Math.floor(k / vCells);
+      const cj = k % vCells;
+
+      for (let di = -1; di <= 1; di++) {
+        for (let dj = -1; dj <= 1; dj++) {
+          if (di === 0 && dj === 0) continue;
+          const ni = ci + di, nj = cj + dj;
+          if (ni < 0 || ni >= uCells || nj < 0 || nj >= vCells) continue;
+          const nk = ni * vCells + nj;
+          if (occupied[nk] && labels[nk] === -1) {
+            labels[nk] = label;
+            queue.push(nk);
+          }
+        }
       }
     }
   }
 
-  return out.length >= 3 ? out : pts2D;  // fall back to raw if filter is too aggressive
+  if (compSizes.length === 0) return pts2D;  // nothing passed the ≥2 filter
+
+  // ── 5. Keep only the largest component ──────────────────────────────────
+  const dominantLabel = compSizes.indexOf(Math.max(...compSizes));
+
+  const out = [];
+  for (let k = 0; k < labels.length; k++) {
+    if (labels[k] !== dominantLabel) continue;
+    const ci = Math.floor(k / vCells);
+    const cj = k % vCells;
+    out.push([uMin + (ci + 0.5) * cellSize, vMin + (cj + 0.5) * cellSize]);
+  }
+
+  return out.length >= 3 ? out : pts2D;
 }
 
 // ─── 2-D Convex Hull (Andrew's monotone chain) ───────────────────────────────
