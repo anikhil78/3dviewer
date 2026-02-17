@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Point Cloud Viewer — Surface Selector</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div id="app">
+
+  <!-- ═══════ SIDEBAR ═══════ -->
+  <aside id="sidebar">
+
+    <div id="app-title">
+      <span class="logo">🔭</span>
+      <h1>Point Cloud Viewer</h1>
+    </div>
+
+    <!-- Upload -->
+    <section class="section">
+      <div class="section-title">Load Point Cloud</div>
+      <div id="upload-area">
+        <div class="upload-icon">📂</div>
+        <p>Drop file or click to upload</p>
+        <span class="file-types">PLY &middot; XYZ &middot; PCD &middot; JSON</span>
+      </div>
+      <input type="file" id="file-input" accept=".ply,.xyz,.pcd,.json,.txt" />
+      <div id="file-info"></div>
+    </section>
+
+    <!-- Display Options -->
+    <section class="section" id="display-section" hidden>
+      <div class="section-title">Display</div>
+
+      <div class="param-row">
+        <label class="param-label">Point size</label>
+        <input type="range" id="point-size" min="1" max="10" step="0.5" value="2" />
+        <span class="param-value" id="point-size-val">2</span>
+      </div>
+
+      <div class="param-row">
+        <label class="param-label">Point opacity</label>
+        <input type="range" id="point-opacity" min="0.05" max="1" step="0.05" value="0.85" />
+        <span class="param-value" id="point-opacity-val">85%</span>
+      </div>
+
+      <div class="param-row">
+        <label class="param-label">Color mode</label>
+        <select id="color-mode">
+          <option value="height">Height gradient</option>
+          <option value="distance">Distance from origin</option>
+          <option value="rgb">RGB (if available)</option>
+        </select>
+      </div>
+
+      <div class="param-row">
+        <label class="param-label">Show surfaces</label>
+        <label class="toggle">
+          <input type="checkbox" id="show-surfaces" checked />
+          <span class="toggle-track"></span>
+        </label>
+      </div>
+    </section>
+
+    <!-- Detection -->
+    <section class="section" id="detection-section" hidden>
+      <div class="section-title">Surface Detection (RANSAC)</div>
+
+      <div class="param-row">
+        <label class="param-label">Max surfaces</label>
+        <input type="range" id="max-surfaces" min="1" max="12" step="1" value="5" />
+        <span class="param-value" id="max-surfaces-val">5</span>
+      </div>
+
+      <div class="param-row">
+        <label class="param-label">Dist threshold</label>
+        <input type="range" id="dist-threshold" min="0.002" max="0.25" step="0.002" value="0.03" />
+        <span class="param-value" id="dist-threshold-val">0.030</span>
+      </div>
+
+      <div class="param-row">
+        <label class="param-label">Iterations</label>
+        <input type="range" id="iterations" min="50" max="600" step="50" value="200" />
+        <span class="param-value" id="iterations-val">200</span>
+      </div>
+
+      <div class="param-row">
+        <label class="param-label">Min inliers %</label>
+        <input type="range" id="min-points" min="1" max="40" step="1" value="5" />
+        <span class="param-value" id="min-points-val">5%</span>
+      </div>
+
+      <button class="btn btn-primary" id="detect-btn" disabled>
+        Detect Surfaces
+      </button>
+    </section>
+
+    <!-- Surface List -->
+    <section class="section" id="surfaces-section" hidden>
+      <div class="section-title-row">
+        <span class="section-title" style="margin-bottom:0">Detected Surfaces</span>
+        <span id="selection-count"></span>
+      </div>
+      <div id="surface-list">
+        <p class="empty-state">Run detection above to find surfaces.</p>
+      </div>
+    </section>
+
+    <!-- Export -->
+    <section class="section" id="export-section" hidden>
+      <div class="section-title">Export</div>
+      <button class="btn btn-success" id="export-btn" disabled>
+        ↓ Export Selected (JSON)
+      </button>
+      <div class="btn-row">
+        <button class="btn btn-secondary" id="select-all-btn">All</button>
+        <button class="btn btn-secondary" id="select-none-btn">None</button>
+      </div>
+    </section>
+
+  </aside>
+
+  <!-- ═══════ VIEWPORT ═══════ -->
+  <main id="viewport">
+    <canvas id="canvas"></canvas>
+
+    <div id="status-overlay">
+      <div id="stats-box">
+        <div>Points: <span id="stat-points">—</span></div>
+        <div>Surfaces: <span id="stat-surfaces">—</span></div>
+        <div>Selected: <span id="stat-selected">—</span></div>
+      </div>
+      <div id="hint-box">
+        Left-drag: rotate &nbsp;·&nbsp; Right-drag / scroll: pan / zoom<br />
+        Click a surface mesh to select it
+      </div>
+    </div>
+
+    <div id="progress-container" hidden>
+      <div id="progress-bar"><div id="progress-fill"></div></div>
+      <div id="progress-label"></div>
+    </div>
+  </main>
+
+</div>
+
+<!-- Three.js via CDN importmap (works in all modern browsers) -->
+<script type="importmap">
+{
+  "imports": {
+    "three":          "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/":  "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
