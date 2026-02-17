@@ -49,8 +49,7 @@ export async function detectSurfaces(positions, {
     ransacPos = uniformSubsample(positions, MAX_RANSAC_PTS);
   }
 
-  const ransacN   = ransacPos.length / 3;
-  const minInliers = Math.max(30, Math.floor(ransacN * minPointsPct));
+  const ransacN = ransacPos.length / 3;
 
   // Bit-mask of remaining (un-assigned) points
   const remaining = new Uint8Array(ransacN).fill(1);
@@ -59,6 +58,14 @@ export async function detectSurfaces(positions, {
   const results = [];
 
   for (let si = 0; si < maxSurfaces; si++) {
+    // Recompute threshold from REMAINING points each iteration.
+    // If fixed against the total, large surfaces (floor, walls) consume most
+    // points and small surfaces (table, shelf) can never reach the required
+    // absolute count — forcing the user to set the % so low that detection
+    // quality degrades everywhere.  Computed adaptively, "5%" consistently
+    // means "5% of whatever is still unassigned".
+    const minInliers = Math.max(30, Math.floor(remainingCount * minPointsPct));
+
     onProgress(si / maxSurfaces, `Fitting surface ${si + 1} of ${maxSurfaces}…`);
     await yieldFrame();   // keep the UI responsive
 
