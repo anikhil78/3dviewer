@@ -232,11 +232,9 @@ export class PointCloudViewer {
    */
   addSurface(surfaceData, idx) {
     const geo = buildSurfaceGeometry(surfaceData);
-
-    // Apply the same centering offset as the point cloud
-    if (this._cloudCenter) {
-      geo.translate(-this._cloudCenter.x, -this._cloudCenter.y, -this._cloudCenter.z);
-    }
+    // NOTE: no centering translation here — RANSAC runs on the already-centered
+    // position buffer (loadPointCloud translates in-place), so hull3D coordinates
+    // are already in scene space. Applying cloudCenter again would double-shift.
 
     const color = new THREE.Color(PALETTE[idx % PALETTE.length]);
 

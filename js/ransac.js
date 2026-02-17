@@ -302,12 +302,22 @@ function convexHull2D(pts) {
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
+// Random reservoir sample — avoids the spatial bias that uniform stride
+// introduces when points are stored in scan-line / surface order.
 function uniformSubsample(positions, maxPts) {
   const total = positions.length / 3;
-  const step  = total / maxPts;
-  const out   = new Float32Array(maxPts * 3);
+
+  // Fisher-Yates reservoir: pick maxPts distinct indices at random
+  const indices = new Int32Array(maxPts);
+  for (let i = 0; i < maxPts; i++) indices[i] = i;
+  for (let i = maxPts; i < total; i++) {
+    const j = Math.floor(Math.random() * (i + 1));
+    if (j < maxPts) indices[j] = i;
+  }
+
+  const out = new Float32Array(maxPts * 3);
   for (let i = 0; i < maxPts; i++) {
-    const src = Math.floor(i * step) * 3;
+    const src = indices[i] * 3;
     out[i*3]   = positions[src];
     out[i*3+1] = positions[src + 1];
     out[i*3+2] = positions[src + 2];

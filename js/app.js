@@ -104,13 +104,21 @@ async function loadFile(file) {
     showProgress(55, 'Building point cloud…');
     await tick();
 
-    const { center } = viewer.loadPointCloud(
+    const { center, size } = viewer.loadPointCloud(
       state.positions,
       state.colors,
       els.colorMode.value
     );
     state.cloudCenter = center;
     viewer.clearSurfaces();
+
+    // Auto-scale distThreshold to ~0.5% of the cloud's bounding-box diagonal.
+    // This keeps the slider reasonable across clouds ranging from mm to metres.
+    const autoThresh = parseFloat(
+      Math.max(0.002, Math.min(0.25, size * 0.005)).toFixed(3)
+    );
+    els.distThreshold.value           = autoThresh;
+    els.distThresholdVal.textContent  = autoThresh.toFixed(3);
 
     const n = state.positions.length / 3;
     els.statPoints.textContent   = n.toLocaleString();
