@@ -64,6 +64,16 @@ def generate_launch_description():
     gz_resource_path = ':'.join(filter(None, gz_share_paths + [existing_gz_path]))
 
     # ------------------------------------------------------------------ #
+    # GZ_SIM_SYSTEM_PLUGIN_PATH                                           #
+    # ros-humble-gz-ros2-control installs its plugin (.so) into           #
+    # /opt/ros/humble/lib.  Gazebo Harmonic must have that directory in   #
+    # GZ_SIM_SYSTEM_PLUGIN_PATH or it cannot load gz_ros2_control-system, #
+    # which causes the entire model spawn to abort (robot never appears). #
+    # ------------------------------------------------------------------ #
+    existing_gz_plugin_path = os.environ.get('GZ_SIM_SYSTEM_PLUGIN_PATH', '')
+    gz_plugin_path = ':'.join(filter(None, ['/opt/ros/humble/lib', existing_gz_plugin_path]))
+
+    # ------------------------------------------------------------------ #
     # Arguments                                                            #
     # ------------------------------------------------------------------ #
     rviz_arg = DeclareLaunchArgument(
@@ -104,6 +114,8 @@ def generate_launch_description():
         additional_env={
             'LIBGL_ALWAYS_SOFTWARE': '1',
             'GZ_SIM_RESOURCE_PATH': gz_resource_path,
+            # Ensure Gazebo can find libgz_ros2_control-system.so
+            'GZ_SIM_SYSTEM_PLUGIN_PATH': gz_plugin_path,
         },
     )
 
@@ -222,8 +234,9 @@ def generate_launch_description():
         rviz_arg,
         robot_state_publisher,
         gz_sim,
-        # Small delay before spawning so Gazebo has time to load the world
-        TimerAction(period=3.0, actions=[spawn_robot]),
+        # Wait for Gazebo to finish loading the world before spawning.
+        # WSL2 + software rendering can take 15–30 s; 12 s is a safe floor.
+        TimerAction(period=12.0, actions=[spawn_robot]),
         spawn_jsb_after_robot,
         spawn_arm_after_jsb,
         ros_gz_bridge,
