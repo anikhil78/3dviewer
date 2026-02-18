@@ -74,6 +74,16 @@ def generate_launch_description():
     gz_plugin_path = ':'.join(filter(None, ['/opt/ros/humble/lib', existing_gz_plugin_path]))
 
     # ------------------------------------------------------------------ #
+    # GZ_IP                                                                #
+    # In WSL2 there are multiple network interfaces (eth0, lo, …).        #
+    # gz-transport multicast discovery can fail to reach across them,     #
+    # causing `ros_gz_sim create` to timeout waiting for world names even  #
+    # when Gazebo is actually running.  Binding to loopback fixes this.   #
+    # setdefault leaves the variable unchanged if the user pre-set it.    #
+    # ------------------------------------------------------------------ #
+    os.environ.setdefault('GZ_IP', '127.0.0.1')
+
+    # ------------------------------------------------------------------ #
     # Arguments                                                            #
     # ------------------------------------------------------------------ #
     rviz_arg = DeclareLaunchArgument(
@@ -235,8 +245,8 @@ def generate_launch_description():
         robot_state_publisher,
         gz_sim,
         # Wait for Gazebo to finish loading the world before spawning.
-        # WSL2 + software rendering can take 15–30 s; 12 s is a safe floor.
-        TimerAction(period=12.0, actions=[spawn_robot]),
+        # WSL2 + software rendering can take 15–30 s; 20 s is a safe floor.
+        TimerAction(period=20.0, actions=[spawn_robot]),
         spawn_jsb_after_robot,
         spawn_arm_after_jsb,
         ros_gz_bridge,
