@@ -3,13 +3,15 @@ sim.launch.py
 =============
 Launches a full Gazebo Harmonic simulation of the Arctos robot arm:
 
-  1. Processes arctos_sim.xacro  →  /robot_description
-  2. Starts robot_state_publisher
-  3. Starts Gazebo Harmonic with arctos_world.sdf
-  4. Spawns the robot into Gazebo
-  5. Spawns ros2_control controllers (joint_state_broadcaster, arm, hand)
-  6. Starts ros_gz_bridge to expose depth-camera topics in ROS2
-  7. Optionally starts RViz2
+  1. Processes arctos_sim.xacro → URDF string (at Python level, before launch)
+  2. Writes that URDF to /tmp so Gazebo can load it via <include> in the world SDF
+  3. Generates a modified world SDF that embeds the robot — no runtime gz-transport
+     spawn call needed (works around WSL2 loopback-multicast breakage)
+  4. Starts Gazebo Harmonic with the generated world
+  5. Starts robot_state_publisher
+  6. Spawns ros2_control controllers after a short delay
+  7. Starts ros_gz_bridge to expose depth-camera topics in ROS2
+  8. Optionally starts RViz2
 
 Usage:
   ros2 launch arctos_gazebo sim.launch.py
@@ -17,6 +19,8 @@ Usage:
 """
 
 import os
+import subprocess
+import tempfile
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
@@ -28,10 +32,9 @@ from launch.actions import (
 )
 from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessExit
-from launch.substitutions import Command, FindExecutable, LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
-from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
@@ -39,51 +42,74 @@ def generate_launch_description():
     # ------------------------------------------------------------------ #
     # Paths                                                                #
     # ------------------------------------------------------------------ #
-    pkg_arctos_gazebo   = get_package_share_directory('arctos_gazebo')
-    pkg_arctos_desc     = get_package_share_directory('arctos_description')
+    pkg_arctos_gazebo = get_package_share_directory('arctos_gazebo')
+    pkg_arctos_desc   = get_package_share_directory('arctos_description')
 
-    world_file    = os.path.join(pkg_arctos_gazebo, 'worlds', 'arctos_world.sdf')
-    xacro_file    = os.path.join(pkg_arctos_gazebo, 'urdf',   'arctos_sim.xacro')
-    rviz_config   = os.path.join(pkg_arctos_desc,   'rviz',   'arctos.rviz')
+    xacro_file  = os.path.join(pkg_arctos_gazebo, 'urdf',   'arctos_sim.xacro')
+    world_file  = os.path.join(pkg_arctos_gazebo, 'worlds', 'arctos_world.sdf')
+    rviz_config = os.path.join(pkg_arctos_desc,   'rviz',   'arctos.rviz')
+
+    # ------------------------------------------------------------------ #
+    # Generate URDF from xacro at Python level (before launch graph).    #
+    # Writing the URDF to a temp file lets Gazebo load it via <include>  #
+    # in the world SDF — no gz-transport service call required.           #
+    # This is the reliable alternative to ros_gz_sim create, which uses  #
+    # gz-transport multicast discovery that breaks on WSL2 loopback.     #
+    # ------------------------------------------------------------------ #
+    urdf_bytes = subprocess.check_output(['xacro', xacro_file])
+    urdf_str   = urdf_bytes.decode('utf-8')
+
+    urdf_tmp = tempfile.NamedTemporaryFile(
+        mode='w', suffix='.urdf', delete=False, prefix='/tmp/arctos_sim_')
+    urdf_tmp.write(urdf_str)
+    urdf_tmp.close()
+    urdf_path = urdf_tmp.name
+
+    # ------------------------------------------------------------------ #
+    # Build a world SDF that includes the robot.                          #
+    # Gazebo Harmonic (libsdformat 14) converts URDF to SDF on the fly   #
+    # when it encounters <include><uri>file://…</uri></include>.          #
+    # ------------------------------------------------------------------ #
+    with open(world_file, 'r') as f:
+        world_sdf = f.read()
+
+    robot_include_xml = (
+        '\n'
+        '    <!-- Robot model: generated from arctos_sim.xacro at launch time -->\n'
+        '    <include>\n'
+        f'      <uri>file://{urdf_path}</uri>\n'
+        '      <name>arctos</name>\n'
+        '      <pose>0 0 0 0 0 0</pose>\n'
+        '    </include>\n'
+        '  '
+    )
+    world_sdf_with_robot = world_sdf.replace('  </world>', robot_include_xml + '</world>')
+
+    world_tmp = tempfile.NamedTemporaryFile(
+        mode='w', suffix='.sdf', delete=False, prefix='/tmp/arctos_world_')
+    world_tmp.write(world_sdf_with_robot)
+    world_tmp.close()
+    world_with_robot_file = world_tmp.name
 
     # ------------------------------------------------------------------ #
     # GZ_SIM_RESOURCE_PATH                                                 #
-    # Gazebo Harmonic resolves package:// URIs (meshes, etc.) by scanning  #
-    # GZ_SIM_RESOURCE_PATH for directories named after the package.        #
-    # We build it from AMENT_PREFIX_PATH (the ROS install prefixes) by     #
-    # appending /share to each prefix so Gazebo finds e.g.                 #
-    #   arctos_description/meshes/base_link.stl                            #
-    # Existing GZ_SIM_RESOURCE_PATH entries are preserved.                 #
+    # Gazebo resolves package:// URIs by scanning GZ_SIM_RESOURCE_PATH   #
+    # for directories named after ROS packages.                           #
     # ------------------------------------------------------------------ #
     ament_prefix_path = os.environ.get('AMENT_PREFIX_PATH', '')
     gz_share_paths = [
         os.path.join(p, 'share')
         for p in ament_prefix_path.split(':') if p
     ]
-    existing_gz_path = os.environ.get('GZ_SIM_RESOURCE_PATH', '')
-    gz_resource_path = ':'.join(filter(None, gz_share_paths + [existing_gz_path]))
+    existing_gz_path   = os.environ.get('GZ_SIM_RESOURCE_PATH', '')
+    gz_resource_path   = ':'.join(filter(None, gz_share_paths + [existing_gz_path]))
 
     # ------------------------------------------------------------------ #
     # GZ_SIM_SYSTEM_PLUGIN_PATH                                           #
-    # ros-humble-gz-ros2-control installs its plugin (.so) into           #
-    # /opt/ros/humble/lib.  Gazebo Harmonic must have that directory in   #
-    # GZ_SIM_SYSTEM_PLUGIN_PATH or it cannot load gz_ros2_control-system, #
-    # which causes the entire model spawn to abort (robot never appears). #
+    # ros-humble-gz-ros2-control installs its plugin (.so) here.         #
     # ------------------------------------------------------------------ #
     existing_gz_plugin_path = os.environ.get('GZ_SIM_SYSTEM_PLUGIN_PATH', '')
     gz_plugin_path = ':'.join(filter(None, ['/opt/ros/humble/lib', existing_gz_plugin_path]))
-
-    # ------------------------------------------------------------------ #
-    # GZ_IP                                                                #
-    # In WSL2 there are multiple network interfaces (eth0, lo, …).        #
-    # gz-transport multicast discovery can fail to reach across them,     #
-    # causing `ros_gz_sim create` to timeout waiting for world names even  #
-    # when Gazebo is actually running.  Binding to loopback fixes this.   #
-    # We force-set it here AND pass it explicitly via additional_env to   #
-    # every Gazebo-related process so there is no ambiguity.              #
-    # ------------------------------------------------------------------ #
-    gz_ip = os.environ.get('GZ_IP', '127.0.0.1')
-    os.environ['GZ_IP'] = gz_ip          # ensure the launch process itself has it
 
     # ------------------------------------------------------------------ #
     # Arguments                                                            #
@@ -95,15 +121,9 @@ def generate_launch_description():
     )
 
     # ------------------------------------------------------------------ #
-    # Robot description (xacro → URDF string)                             #
-    # ------------------------------------------------------------------ #
-    robot_description = ParameterValue(
-        Command([FindExecutable(name='xacro'), ' ', xacro_file]),
-        value_type=str,
-    )
-
-    # ------------------------------------------------------------------ #
     # robot_state_publisher                                                #
+    # Use the already-generated URDF string directly rather than running  #
+    # xacro again via Command substitution.                               #
     # ------------------------------------------------------------------ #
     robot_state_publisher = Node(
         package='robot_state_publisher',
@@ -111,60 +131,34 @@ def generate_launch_description():
         name='robot_state_publisher',
         output='screen',
         parameters=[{
-            'robot_description': robot_description,
+            'robot_description': ParameterValue(urdf_str, value_type=str),
             'use_sim_time': True,
         }],
     )
 
     # ------------------------------------------------------------------ #
     # Gazebo Harmonic server                                               #
-    # The -r flag starts the simulation running immediately.               #
+    # Loads the generated world SDF which already contains the robot.    #
+    # No separate spawn step is needed.                                   #
     # ------------------------------------------------------------------ #
     gz_sim = ExecuteProcess(
-        cmd=['gz', 'sim', '-r', world_file],
+        cmd=['gz', 'sim', '-r', world_with_robot_file],
         output='screen',
-        emulate_tty=True,          # surface Gazebo stdout/stderr to the console
+        emulate_tty=True,
         additional_env={
-            # Bind gz-transport to loopback so it's reachable from ros_gz_sim.
-            # Must be explicit here; do NOT rely solely on os.environ propagation.
-            'GZ_IP': gz_ip,
-            # Software rendering — required for WSL2 / llvmpipe environments.
             'LIBGL_ALWAYS_SOFTWARE': '1',
-            # Mesa overrides: report GL 3.3 / GLSL 330 so ogre (1.x) initialises
-            # without attempting unsupported extensions.
             'MESA_GL_VERSION_OVERRIDE': '3.3',
             'MESA_GLSL_VERSION_OVERRIDE': '330',
             'OGRE_RTT_MODE': 'Copy',
             'GZ_SIM_RESOURCE_PATH': gz_resource_path,
-            # Ensure Gazebo can find libgz_ros2_control-system.so
             'GZ_SIM_SYSTEM_PLUGIN_PATH': gz_plugin_path,
         },
     )
 
     # ------------------------------------------------------------------ #
-    # Spawn the robot URDF into Gazebo                                     #
-    # Reads /robot_description published by robot_state_publisher.         #
-    #                                                                      #
-    # Uses ExecuteProcess (not Node) so we can pass additional_env with   #
-    # GZ_IP explicitly — Node does not expose additional_env in Humble.   #
-    # ------------------------------------------------------------------ #
-    spawn_robot = ExecuteProcess(
-        cmd=[
-            'ros2', 'run', 'ros_gz_sim', 'create',
-            '-name',  'arctos',
-            '-topic', '/robot_description',
-            '-x', '0.0',
-            '-y', '0.0',
-            '-z', '0.0',
-        ],
-        additional_env={'GZ_IP': gz_ip},
-        output='screen',
-    )
-
-    # ------------------------------------------------------------------ #
     # Controllers                                                          #
-    # The gz_ros2_control plugin starts the controller_manager inside Gz.  #
-    # We wait for the spawn to finish before activating controllers.       #
+    # gz_ros2_control starts controller_manager inside Gz when the model  #
+    # loads. Wait 30 s for Gazebo + plugin to be ready, then spawn.      #
     # ------------------------------------------------------------------ #
     joint_state_broadcaster_spawner = Node(
         package='controller_manager',
@@ -190,14 +184,7 @@ def generate_launch_description():
         output='screen',
     )
 
-    # Chain: spawn robot → joint_state_broadcaster → arm + hand controllers
-    spawn_jsb_after_robot = RegisterEventHandler(
-        OnProcessExit(
-            target_action=spawn_robot,
-            on_exit=[joint_state_broadcaster_spawner],
-        )
-    )
-
+    # Chain: joint_state_broadcaster → arm + hand controllers
     spawn_arm_after_jsb = RegisterEventHandler(
         OnProcessExit(
             target_action=joint_state_broadcaster_spawner,
@@ -206,34 +193,17 @@ def generate_launch_description():
     )
 
     # ------------------------------------------------------------------ #
-    # ros_gz_bridge — bridge Gazebo D435 camera topics into ROS2           #
-    #                                                                      #
-    # Topic format: /gz_topic@ros_type[gz_type   (Gazebo → ROS2)          #
-    #                                                                      #
-    # The D435 rgbd_camera sensor (topic="camera") publishes in Gazebo:   #
-    #   /camera/image          848×480 RGB (sensor_msgs/Image)             #
-    #   /camera/depth_image    848×480 float32 depth, metres               #
-    #   /camera/camera_info    intrinsics for depth sensor FOV             #
-    #   /camera/points         Raw XYZRGB PointCloud2 from Gazebo          #
-    #                                                                      #
-    # In addition, the depth_image_proc node below derives an organised    #
-    # pointcloud at /camera/points_registered from depth + camera_info,   #
-    # which is better suited for PCL surface-segmentation algorithms.      #
+    # ros_gz_bridge — bridge Gazebo D435 camera topics into ROS2          #
     # ------------------------------------------------------------------ #
     ros_gz_bridge = Node(
         package='ros_gz_bridge',
         executable='parameter_bridge',
         name='ros_gz_bridge',
         arguments=[
-            # Simulation clock — needed for use_sim_time to work
             '/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock',
-            # D435 colour stream
             '/camera/image@sensor_msgs/msg/Image[gz.msgs.Image',
-            # D435 depth stream
             '/camera/depth_image@sensor_msgs/msg/Image[gz.msgs.Image',
-            # Camera intrinsics (covers both colour and depth in sim)
             '/camera/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo',
-            # Raw XYZRGB cloud from Gazebo sensor — available immediately
             '/camera/points@sensor_msgs/msg/PointCloud2[gz.msgs.PointCloudPacked',
         ],
         output='screen',
@@ -241,23 +211,17 @@ def generate_launch_description():
     )
 
     # ------------------------------------------------------------------ #
-    # depth_image_proc — organised XYZRGB pointcloud from depth image     #
-    #                                                                      #
-    # Subscribes to the bridged depth image and camera_info and outputs   #
-    # an organised (row×col structured) PointCloud2 on                    #
-    # /camera/points_registered.  Organised clouds preserve 2-D pixel     #
-    # topology which is required by PCL normal estimation and surface      #
-    # segmentation algorithms used in the surface-detection pipeline.      #
+    # depth_image_proc — organised XYZRGB pointcloud from depth image    #
     # ------------------------------------------------------------------ #
     point_cloud_node = Node(
         package='depth_image_proc',
         executable='point_cloud_xyzrgb_node',
         name='point_cloud_xyzrgb',
         remappings=[
-            ('rgb/image_rect_color',          '/camera/image'),
-            ('rgb/camera_info',               '/camera/camera_info'),
-            ('depth_registered/image_rect',   '/camera/depth_image'),
-            ('depth_registered/points',       '/camera/points_registered'),
+            ('rgb/image_rect_color',        '/camera/image'),
+            ('rgb/camera_info',             '/camera/camera_info'),
+            ('depth_registered/image_rect', '/camera/depth_image'),
+            ('depth_registered/points',     '/camera/points_registered'),
         ],
         parameters=[{'use_sim_time': True}],
         output='screen',
@@ -265,15 +229,11 @@ def generate_launch_description():
 
     # ------------------------------------------------------------------ #
     # RViz2 (optional)                                                     #
-    # Reuses the existing arctos.rviz config from arctos_description.      #
-    # Software rendering is forced via LIBGL_ALWAYS_SOFTWARE=1 so it       #
-    # works in WSL2 without a dedicated GPU.                               #
     # ------------------------------------------------------------------ #
     rviz2 = Node(
         package='rviz2',
         executable='rviz2',
         name='rviz2',
-        # Use the existing rviz config if present; fall back to no config
         arguments=(['-d', rviz_config] if os.path.exists(rviz_config) else []),
         parameters=[{'use_sim_time': True}],
         additional_env={'LIBGL_ALWAYS_SOFTWARE': '1'},
@@ -285,11 +245,10 @@ def generate_launch_description():
         rviz_arg,
         robot_state_publisher,
         gz_sim,
-        # Wait for Gazebo to finish loading the world before spawning.
-        # WSL2 + software rendering + sensors plugin (ogre) can take up to
-        # 60–80 s on first run; 90 s is a safe floor.
-        TimerAction(period=90.0, actions=[spawn_robot]),
-        spawn_jsb_after_robot,
+        # Wait 30 s for Gazebo + gz_ros2_control plugin to initialise,
+        # then spawn controllers. (No separate robot-spawn step needed —
+        # the robot is already in the world SDF.)
+        TimerAction(period=30.0, actions=[joint_state_broadcaster_spawner]),
         spawn_arm_after_jsb,
         ros_gz_bridge,
         point_cloud_node,
