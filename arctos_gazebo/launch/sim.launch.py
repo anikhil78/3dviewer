@@ -203,15 +203,19 @@ def generate_launch_description():
     )
 
     # ------------------------------------------------------------------ #
-    # ros_gz_bridge — bridge Gazebo camera topics into ROS2                #
+    # ros_gz_bridge — bridge Gazebo D435 camera topics into ROS2           #
     #                                                                      #
     # Topic format: /gz_topic@ros_type[gz_type   (Gazebo → ROS2)          #
     #                                                                      #
-    # The rgbd_camera sensor with <topic>camera</topic> publishes:         #
-    #   /camera/image          RGB image                                   #
-    #   /camera/depth_image    float32 depth image                         #
-    #   /camera/camera_info    intrinsics + frame                          #
-    #   /camera/points         PointCloud2                                 #
+    # The D435 rgbd_camera sensor (topic="camera") publishes in Gazebo:   #
+    #   /camera/image          848×480 RGB (sensor_msgs/Image)             #
+    #   /camera/depth_image    848×480 float32 depth, metres               #
+    #   /camera/camera_info    intrinsics for depth sensor FOV             #
+    #   /camera/points         Raw XYZRGB PointCloud2 from Gazebo          #
+    #                                                                      #
+    # In addition, the depth_image_proc node below derives an organised    #
+    # pointcloud at /camera/points_registered from depth + camera_info,   #
+    # which is better suited for PCL surface-segmentation algorithms.      #
     # ------------------------------------------------------------------ #
     ros_gz_bridge = Node(
         package='ros_gz_bridge',
@@ -220,17 +224,40 @@ def generate_launch_description():
         arguments=[
             # Simulation clock — needed for use_sim_time to work
             '/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock',
-            # RGB image
+            # D435 colour stream
             '/camera/image@sensor_msgs/msg/Image[gz.msgs.Image',
-            # Depth image
+            # D435 depth stream
             '/camera/depth_image@sensor_msgs/msg/Image[gz.msgs.Image',
-            # Camera intrinsics (shared for both rgb and depth)
+            # Camera intrinsics (covers both colour and depth in sim)
             '/camera/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo',
-            # Dense point cloud (XYZRGB)
+            # Raw XYZRGB cloud from Gazebo sensor — available immediately
             '/camera/points@sensor_msgs/msg/PointCloud2[gz.msgs.PointCloudPacked',
         ],
         output='screen',
         parameters=[{'use_sim_time': True}],
+    )
+
+    # ------------------------------------------------------------------ #
+    # depth_image_proc — organised XYZRGB pointcloud from depth image     #
+    #                                                                      #
+    # Subscribes to the bridged depth image and camera_info and outputs   #
+    # an organised (row×col structured) PointCloud2 on                    #
+    # /camera/points_registered.  Organised clouds preserve 2-D pixel     #
+    # topology which is required by PCL normal estimation and surface      #
+    # segmentation algorithms used in the surface-detection pipeline.      #
+    # ------------------------------------------------------------------ #
+    point_cloud_node = Node(
+        package='depth_image_proc',
+        executable='point_cloud_xyzrgb',
+        name='point_cloud_xyzrgb',
+        remappings=[
+            ('rgb/image_rect_color',          '/camera/image'),
+            ('rgb/camera_info',               '/camera/camera_info'),
+            ('depth_registered/image_rect',   '/camera/depth_image'),
+            ('depth_registered/points',       '/camera/points_registered'),
+        ],
+        parameters=[{'use_sim_time': True}],
+        output='screen',
     )
 
     # ------------------------------------------------------------------ #
@@ -261,5 +288,6 @@ def generate_launch_description():
         spawn_jsb_after_robot,
         spawn_arm_after_jsb,
         ros_gz_bridge,
+        point_cloud_node,
         rviz2,
     ])

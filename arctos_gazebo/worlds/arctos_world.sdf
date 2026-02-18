@@ -20,22 +20,16 @@
             name="gz::sim::systems::UserCommands"/>
     <plugin filename="gz-sim-scene-broadcaster-system"
             name="gz::sim::systems::SceneBroadcaster"/>
-    <!--
-      Sensors plugin (ogre2) is disabled for Phase 1 while getting basic
-      robot spawning working in WSL2 software-rendering environments.
-      ogre2 initialisation hangs silently under llvmpipe / LIBGL_ALWAYS_SOFTWARE,
-      preventing gz-transport from becoming ready and causing `create` to
-      time out on "Requesting list of world names".
-
-      Re-enable AFTER confirming the robot spawns successfully.
-      See: https://github.com/gazebosim/gz-sim/issues/1727
-    -->
-    <!--
+    <!-- Sensors plugin — required for camera/depth output.
+         Robot spawning is confirmed working, so this is now enabled.
+         ogre2 is Gazebo Harmonic's primary renderer. In WSL2 the launch file
+         sets LIBGL_ALWAYS_SOFTWARE=1, MESA_GL_VERSION_OVERRIDE=3.3 and
+         OGRE_RTT_MODE=Copy to make ogre2 work under llvmpipe/software GL.
+         If Gazebo hangs on startup, check those env vars are propagated. -->
     <plugin filename="gz-sim-sensors-system"
             name="gz::sim::systems::Sensors">
       <render_engine>ogre2</render_engine>
     </plugin>
-    -->
     <plugin filename="gz-sim-contact-system"
             name="gz::sim::systems::Contact"/>
 

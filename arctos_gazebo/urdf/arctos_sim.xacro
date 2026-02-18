@@ -7,7 +7,8 @@
     1. ros2_control block using gz_ros2_control/GazeboSimSystem (replaces the
        CAN-based ArctosInterface used on real hardware)
     2. Gazebo gz_ros2_control system plugin
-    3. Eye-in-hand RGBD camera fixed to Gripper_1 (end effector)
+    3. Intel RealSense D435 RGBD camera fixed to base_link (world-fixed
+       viewpoint covering the full arm workspace)
 -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="arctos_sim">
 
@@ -142,46 +143,61 @@
   </gazebo>
 
   <!-- ================================================================== -->
-  <!-- Eye-in-hand RGBD camera mounted on the robot end effector           -->
+  <!-- Intel RealSense D435 — base-fixed, looking at the arm workspace    -->
   <!--                                                                     -->
-  <!-- Parent link: Gripper_1 (child of C_joint, parent of jaw joints).   -->
+  <!-- Parent link: base_link (fixed relative to the world — the arm's    -->
+  <!-- base does not move, so this camera has a stable viewpoint of the   -->
+  <!-- entire workspace regardless of arm pose).                           -->
   <!--                                                                     -->
-  <!-- camera_link      — physical camera body; Gazebo camera looks along  -->
-  <!--                    its +X axis, so rpy below aims the sensor.       -->
-  <!-- camera_optical_frame — ROS camera convention (Z fwd, X right, Y↓)  -->
+  <!-- Mount position (adjust to suit your physical setup):               -->
+  <!--   xyz="-0.08 0.0 0.18"  — 8 cm behind, 18 cm above base origin    -->
+  <!--   rpy="0 0.35 0"        — pitched ~20° forward to centre the FOV  -->
+  <!--                            on the arm's reachable workspace         -->
   <!--                                                                     -->
-  <!-- ADJUST origin xyz/rpy on camera_joint to match your actual camera   -->
-  <!-- mount position.  Current default:                                   -->
-  <!--   xyz="0.06 0 0.04"  — 6 cm forward, 4 cm above gripper origin    -->
-  <!--   rpy="0 0.5236 0"   — pitched 30° downward to see grasp point     -->
+  <!-- D435 depth sensor parameters (848×480 mode):                       -->
+  <!--   Horizontal FOV : 86°  (1.5009 rad)                               -->
+  <!--   Vertical FOV   : 57°  (0.9948 rad, implied by 848×480 aspect)   -->
+  <!--   Min depth      : 0.105 m                                          -->
+  <!--   Max depth      : 10.0 m                                           -->
+  <!--   Frame rate     : 30 Hz                                            -->
+  <!--   Depth noise    : Gaussian σ = 0.003 m (≈ D435 at ~1 m)          -->
+  <!--                                                                     -->
+  <!-- Topics (via ros_gz_bridge):                                         -->
+  <!--   /camera/image        — 848×480 RGB                               -->
+  <!--   /camera/depth_image  — 848×480 float32 depth (metres)            -->
+  <!--   /camera/camera_info  — intrinsics                                 -->
+  <!--   /camera/points       — XYZRGB PointCloud2                        -->
   <!-- ================================================================== -->
 
-  <!-- Camera body (small box, visible in RViz/Gazebo) -->
+  <!-- Camera body: D435 is 90×25×25 mm; approximate as a flat box -->
   <link name="camera_link">
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <box size="0.04 0.04 0.02"/>
+        <box size="0.025 0.090 0.025"/>
       </geometry>
-      <material name="camera_dark">
-        <color rgba="0.2 0.2 0.2 1.0"/>
+      <material name="realsense_body">
+        <color rgba="0.15 0.15 0.15 1.0"/>
       </material>
     </visual>
     <inertial>
-      <mass value="0.05"/>
-      <inertia ixx="0.000001" iyy="0.000001" izz="0.000001"
+      <mass value="0.072"/>  <!-- D435 mass: 72 g -->
+      <inertia ixx="0.000038" iyy="0.000005" izz="0.000038"
                ixy="0" ixz="0" iyz="0"/>
     </inertial>
   </link>
 
   <joint name="camera_joint" type="fixed">
-    <parent link="Gripper_1"/>
+    <parent link="base_link"/>
     <child link="camera_link"/>
-    <!-- 6 cm forward along gripper X, 4 cm above, pitched 30° down toward grasp -->
-    <origin xyz="0.06 0.0 0.04" rpy="0 0.5236 0"/>
+    <!-- Mounted behind and above the base, pitched forward to cover workspace.
+         Tune xyz/rpy here if you physically relocate the camera. -->
+    <origin xyz="-0.08 0.0 0.18" rpy="0 0.35 0"/>
   </joint>
 
-  <!-- ROS optical frame: Z forward, X right, Y down -->
+  <!-- ROS optical frame convention: Z forward, X right, Y down.
+       The -90° rotation around Z then -90° around X transforms from
+       the URDF body frame (X forward) to the ROS optical convention. -->
   <link name="camera_optical_frame"/>
 
   <joint name="camera_optical_joint" type="fixed">
@@ -190,26 +206,33 @@
     <origin xyz="0 0 0" rpy="-1.5708 0 -1.5708"/>
   </joint>
 
-  <!-- RGBD sensor (Gazebo Harmonic).                                      -->
-  <!-- Near clip 0.05 m suits close-range grasping; far 1.5 m covers the  -->
-  <!-- full reachable workspace of the Arctos arm.                         -->
+  <!-- Intel RealSense D435 RGBD sensor (Gazebo Harmonic).
+       Parameters match the D435 848×480 depth streaming mode.
+       The rgbd_camera sensor publishes colour image, depth image,
+       camera_info and a dense PointCloud2 under the <topic> prefix. -->
   <gazebo reference="camera_optical_frame">
-    <sensor name="depth_camera" type="rgbd_camera">
+    <sensor name="d435" type="rgbd_camera">
       <camera>
-        <horizontal_fov>1.047</horizontal_fov>  <!-- 60° FOV -->
+        <!-- D435 depth sensor horizontal FOV at 848×480: 86° -->
+        <horizontal_fov>1.5009</horizontal_fov>
         <image>
-          <width>640</width>
+          <!-- 848×480 — standard D435 streaming resolution -->
+          <width>848</width>
           <height>480</height>
           <format>R8G8B8</format>
         </image>
         <clip>
-          <near>0.05</near>
-          <far>1.5</far>
+          <!-- D435 minimum reliable depth: 0.105 m -->
+          <near>0.105</near>
+          <!-- Practical indoor range; D435 spec is up to ~10 m -->
+          <far>10.0</far>
         </clip>
         <noise>
+          <!-- Depth noise: D435 accuracy is ~2 % at 1 m → ~0.02 m.
+               σ = 0.003 m gives a realistic baseline for close-range work. -->
           <type>gaussian</type>
           <mean>0.0</mean>
-          <stddev>0.007</stddev>
+          <stddev>0.003</stddev>
         </noise>
       </camera>
       <always_on>true</always_on>
