@@ -7,7 +7,7 @@
     1. ros2_control block using gz_ros2_control/GazeboSimSystem (replaces the
        CAN-based ArctosInterface used on real hardware)
     2. Gazebo gz_ros2_control system plugin
-    3. Fixed depth camera stand attached to world with an rgbd_camera sensor
+    3. Eye-in-hand RGBD camera fixed to Gripper_1 (end effector)
 -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="arctos_sim">
 
