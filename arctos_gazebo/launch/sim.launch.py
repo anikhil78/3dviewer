@@ -33,7 +33,10 @@ from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
     ExecuteProcess,
+    RegisterEventHandler,
+    TimerAction,
 )
+from launch.event_handlers import OnProcessExit
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -159,24 +162,46 @@ def generate_launch_description():
     )
 
     # ------------------------------------------------------------------ #
-    # joint_state_publisher                                                #
-    # gz_ros2_control (ros-humble-gz-ros2-control) is compiled against    #
-    # gz-plugin 1.x (Ignition Fortress/Garden) and is binary-incompatible #
-    # with gz-sim 8 (Harmonic) which requires gz-plugin 2.x.             #
-    # Instead, publish zero joint states from joint_state_publisher so    #
-    # robot_state_publisher can broadcast the TF tree and RViz renders    #
-    # the robot correctly. The arm holds its pose in Gazebo because       #
-    # gravity is disabled in the URDF (<gravity>false</gravity>).         #
+    # ros2_control controllers                                             #
+    # gz_ros2_control starts controller_manager inside Gazebo when the   #
+    # robot model loads. We wait 30 s for Gazebo + plugin to initialise, #
+    # then spawn controllers in order.                                    #
     #                                                                     #
-    # For interactive joint-angle control run in a separate terminal:     #
-    #   ros2 run joint_state_publisher_gui joint_state_publisher_gui      #
+    # IMPORTANT: requires gz_ros2_control built against gz-plugin 2.x.   #
+    # The apt package ros-humble-gz-ros2-control 0.7.17 is compiled for  #
+    # gz-plugin 1.x (Ignition Fortress) and will NOT load with gz-sim 8. #
+    # Build from source — see README for instructions.                    #
     # ------------------------------------------------------------------ #
-    joint_state_publisher = Node(
-        package='joint_state_publisher',
-        executable='joint_state_publisher',
-        name='joint_state_publisher',
-        parameters=[{'use_sim_time': True}],
+    joint_state_broadcaster_spawner = Node(
+        package='controller_manager',
+        executable='spawner',
+        name='joint_state_broadcaster_spawner',
+        arguments=['joint_state_broadcaster', '--controller-manager', '/controller_manager'],
         output='screen',
+    )
+
+    arm_controller_spawner = Node(
+        package='controller_manager',
+        executable='spawner',
+        name='arctos_arm_controller_spawner',
+        arguments=['arctos_arm_controller', '--controller-manager', '/controller_manager'],
+        output='screen',
+    )
+
+    hand_controller_spawner = Node(
+        package='controller_manager',
+        executable='spawner',
+        name='arctos_hand_controller_spawner',
+        arguments=['arctos_hand_controller', '--controller-manager', '/controller_manager'],
+        output='screen',
+    )
+
+    # Chain: joint_state_broadcaster → arm + hand controllers
+    spawn_arm_after_jsb = RegisterEventHandler(
+        OnProcessExit(
+            target_action=joint_state_broadcaster_spawner,
+            on_exit=[arm_controller_spawner, hand_controller_spawner],
+        )
     )
 
     # ------------------------------------------------------------------ #
@@ -231,8 +256,12 @@ def generate_launch_description():
     return LaunchDescription([
         rviz_arg,
         robot_state_publisher,
-        joint_state_publisher,
         gz_sim,
+        # Wait 30 s for Gazebo + gz_ros2_control plugin to initialise,
+        # then spawn controllers. The robot is already in the world SDF so
+        # no separate spawn step is needed.
+        TimerAction(period=30.0, actions=[joint_state_broadcaster_spawner]),
+        spawn_arm_after_jsb,
         ros_gz_bridge,
         point_cloud_node,
         rviz2,

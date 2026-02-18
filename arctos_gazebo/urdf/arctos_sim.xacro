@@ -19,11 +19,130 @@
   <xacro:include filename="$(find arctos_description)/urdf/arctos.xacro"/>
 
   <!-- ================================================================== -->
-  <!-- Disable gravity on the robot so it holds its pose without a        -->
-  <!-- controller. Joint states come from joint_state_publisher in ROS.   -->
+  <!-- ros2_control block — Gazebo hardware plugin                         -->
+  <!-- Joint definitions mirror arctos.ros2_control.xacro exactly so the  -->
+  <!-- same controllers.yaml works unchanged for real hardware.            -->
+  <!-- ================================================================== -->
+  <ros2_control name="GazeboSystem" type="system">
+    <hardware>
+      <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+    </hardware>
+
+    <joint name="X_joint">
+      <command_interface name="position">
+        <param name="min">-3.14159265</param>
+        <param name="max">3.14159265</param>
+      </command_interface>
+      <command_interface name="velocity">
+        <param name="min">-3.15</param>
+        <param name="max">3.15</param>
+      </command_interface>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+
+    <joint name="Y_joint">
+      <command_interface name="position">
+        <param name="min">-0.96</param>
+        <param name="max">2.18</param>
+      </command_interface>
+      <command_interface name="velocity">
+        <param name="min">-3.15</param>
+        <param name="max">3.15</param>
+      </command_interface>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+
+    <joint name="Z_joint">
+      <command_interface name="position">
+        <param name="min">-1.5708</param>
+        <param name="max">0.9599</param>
+      </command_interface>
+      <command_interface name="velocity">
+        <param name="min">-3.15</param>
+        <param name="max">3.15</param>
+      </command_interface>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+
+    <joint name="A_joint">
+      <command_interface name="position">
+        <param name="min">-1.5708</param>
+        <param name="max">1.5708</param>
+      </command_interface>
+      <command_interface name="velocity">
+        <param name="min">-3.2</param>
+        <param name="max">3.2</param>
+      </command_interface>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+
+    <joint name="B_joint">
+      <command_interface name="position">
+        <param name="min">-1.55</param>
+        <param name="max">1.55</param>
+      </command_interface>
+      <command_interface name="velocity">
+        <param name="min">-3.2</param>
+        <param name="max">3.2</param>
+      </command_interface>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+
+    <joint name="C_joint">
+      <command_interface name="position">
+        <param name="min">-3.14159265</param>
+        <param name="max">3.14159265</param>
+      </command_interface>
+      <command_interface name="velocity">
+        <param name="min">-3.2</param>
+        <param name="max">3.2</param>
+      </command_interface>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+
+    <joint name="Left_jaw_joint">
+      <command_interface name="position">
+        <param name="min">0.0</param>
+        <param name="max">0.015</param>
+      </command_interface>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+
+  </ros2_control>
+
+  <!-- ================================================================== -->
+  <!-- gz_ros2_control system plugin                                        -->
+  <!-- NOTE: requires gz_ros2_control built against gz-plugin 2.x          -->
+  <!-- (gz-sim 8 / Harmonic). The apt package ros-humble-gz-ros2-control   -->
+  <!-- 0.7.17 is compiled against gz-plugin 1.x and will NOT load.         -->
+  <!-- Build from source: see README for instructions.                      -->
   <!-- ================================================================== -->
   <gazebo>
-    <gravity>false</gravity>
+    <plugin filename="gz_ros2_control-system"
+            name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+      <parameters>$(find arctos_gazebo)/config/sim_controllers.yaml</parameters>
+    </plugin>
   </gazebo>
 
   <!-- ================================================================== -->
