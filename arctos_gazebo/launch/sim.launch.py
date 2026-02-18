@@ -128,9 +128,12 @@ def generate_launch_description():
             # Bind gz-transport to loopback so it's reachable from ros_gz_sim.
             # Must be explicit here; do NOT rely solely on os.environ propagation.
             'GZ_IP': gz_ip,
+            # Software rendering — required for WSL2 / llvmpipe environments.
             'LIBGL_ALWAYS_SOFTWARE': '1',
-            # ogre2 software-rendering helpers (WSL2 / llvmpipe)
+            # Mesa overrides: report GL 3.3 / GLSL 330 so ogre (1.x) initialises
+            # without attempting unsupported extensions.
             'MESA_GL_VERSION_OVERRIDE': '3.3',
+            'MESA_GLSL_VERSION_OVERRIDE': '330',
             'OGRE_RTT_MODE': 'Copy',
             'GZ_SIM_RESOURCE_PATH': gz_resource_path,
             # Ensure Gazebo can find libgz_ros2_control-system.so
@@ -283,8 +286,9 @@ def generate_launch_description():
         robot_state_publisher,
         gz_sim,
         # Wait for Gazebo to finish loading the world before spawning.
-        # WSL2 + software rendering can take 20–40 s; 40 s is a safe floor.
-        TimerAction(period=40.0, actions=[spawn_robot]),
+        # WSL2 + software rendering + sensors plugin (ogre) can take up to
+        # 60–80 s on first run; 90 s is a safe floor.
+        TimerAction(period=90.0, actions=[spawn_robot]),
         spawn_jsb_after_robot,
         spawn_arm_after_jsb,
         ros_gz_bridge,

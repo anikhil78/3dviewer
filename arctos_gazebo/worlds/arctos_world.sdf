@@ -21,14 +21,13 @@
     <plugin filename="gz-sim-scene-broadcaster-system"
             name="gz::sim::systems::SceneBroadcaster"/>
     <!-- Sensors plugin — required for camera/depth output.
-         Robot spawning is confirmed working, so this is now enabled.
-         ogre2 is Gazebo Harmonic's primary renderer. In WSL2 the launch file
-         sets LIBGL_ALWAYS_SOFTWARE=1, MESA_GL_VERSION_OVERRIDE=3.3 and
-         OGRE_RTT_MODE=Copy to make ogre2 work under llvmpipe/software GL.
-         If Gazebo hangs on startup, check those env vars are propagated. -->
+         ogre (Ogre 1.x) is used instead of ogre2 because llvmpipe / software
+         rendering under WSL2 does not support the OpenGL 3.3 features required
+         by ogre2, causing gz-transport to hang on startup.
+         ogre (1.x) works correctly with LIBGL_ALWAYS_SOFTWARE=1. -->
     <plugin filename="gz-sim-sensors-system"
             name="gz::sim::systems::Sensors">
-      <render_engine>ogre2</render_engine>
+      <render_engine>ogre</render_engine>
     </plugin>
     <plugin filename="gz-sim-contact-system"
             name="gz::sim::systems::Contact"/>
