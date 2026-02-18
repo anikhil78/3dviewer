@@ -1,27 +1,39 @@
 """
 sim.launch.py
 =============
-Launches a Gazebo Harmonic simulation of the Arctos robot arm.
+Launches a Gazebo Harmonic simulation of the Arctos robot arm with full
+ros2_control — the same joint_trajectory_controller pipeline used on real
+hardware.  This means joint commands tested in simulation transfer directly
+to the physical arm without code changes.
 
   1. Processes arctos_sim.xacro → URDF (at Python level, before launch graph)
   2. Patches arctos_world.sdf to embed the robot via <include> — no gz-transport
-     spawn call needed (ros_gz_sim create uses loopback multicast which is broken
-     in WSL2; the SDF-include path bypasses this entirely)
+     spawn call needed (ros_gz_sim create uses loopback multicast that breaks on
+     WSL2; the SDF-include path bypasses this entirely)
   3. Starts Gazebo Harmonic with the patched world SDF
   4. Starts robot_state_publisher with the same URDF string
-  5. Starts joint_state_publisher to broadcast zero joint states so RViz renders
-     the robot correctly (gz_ros2_control is incompatible with gz-sim 8 — it was
-     compiled against gz-plugin 1.x / Ignition Fortress; gz-sim 8 needs gz-plugin 2.x)
+  5. Waits 30 s for Gazebo + gz_ros2_control plugin to initialise, then spawns
+     controllers in order:
+       joint_state_broadcaster  → publishes /joint_states from sim
+       arctos_arm_controller    → joint_trajectory_controller (position, 6 DOF)
+       arctos_hand_controller   → GripperActionController (Left_jaw_joint)
   6. Starts ros_gz_bridge for clock + D435 camera topics
   7. Starts depth_image_proc for organised XYZRGB point cloud
   8. Optionally starts RViz2
 
-For interactive joint-angle control run alongside this launch:
-  ros2 run joint_state_publisher_gui joint_state_publisher_gui
+PREREQUISITE: gz_ros2_control must be built from source against gz-sim 8.
+  The apt package ros-humble-gz-ros2-control 0.7.17 is compiled against
+  gz-plugin 1.x (Ignition Fortress) and will NOT load with gz-sim 8 (Harmonic).
+  Run  scripts/setup_gz_ros2_control.sh  once to build and install it.
+  Then always source ~/ros2_ws/install/setup.bash before launching.
 
 Usage:
+  source ~/ros2_ws/install/setup.bash
   ros2 launch arctos_gazebo sim.launch.py
   ros2 launch arctos_gazebo sim.launch.py rviz:=false
+
+Verify controllers after ~35 s:
+  ros2 control list_controllers
 """
 
 import os
@@ -112,10 +124,21 @@ def generate_launch_description():
 
     # ------------------------------------------------------------------ #
     # GZ_SIM_SYSTEM_PLUGIN_PATH                                           #
-    # ros-humble-gz-ros2-control installs its plugin (.so) here.         #
+    # Priority order (first wins):                                        #
+    #   1. ~/ros2_ws  — gz_ros2_control built from source (gz-plugin 2.x) #
+    #   2. /opt/ros/humble/lib — system install (gz-plugin 1.x, broken)  #
+    #   3. GZ_SIM_SYSTEM_PLUGIN_PATH from environment                     #
+    # Sourcing ~/ros2_ws/install/setup.bash also sets this automatically, #
+    # but we set it explicitly here so the launch file is self-contained. #
     # ------------------------------------------------------------------ #
+    home_dir = os.path.expanduser('~')
+    ws_plugin_path = os.path.join(home_dir, 'ros2_ws', 'install', 'gz_ros2_control', 'lib')
     existing_gz_plugin_path = os.environ.get('GZ_SIM_SYSTEM_PLUGIN_PATH', '')
-    gz_plugin_path = ':'.join(filter(None, ['/opt/ros/humble/lib', existing_gz_plugin_path]))
+    gz_plugin_path = ':'.join(filter(None, [
+        ws_plugin_path,           # source-built (correct, gz-plugin 2.x)
+        '/opt/ros/humble/lib',    # system fallback (may be wrong version)
+        existing_gz_plugin_path,
+    ]))
 
     # ------------------------------------------------------------------ #
     # Arguments                                                            #
