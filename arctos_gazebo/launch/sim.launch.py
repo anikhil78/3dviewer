@@ -251,7 +251,7 @@ def generate_launch_description():
     # ------------------------------------------------------------------ #
     point_cloud_node = Node(
         package='depth_image_proc',
-        executable='point_cloud_xyzrgb',
+        executable='point_cloud_xyzrgb_node',
         name='point_cloud_xyzrgb',
         remappings=[
             ('rgb/image_rect_color',          '/camera/image'),
