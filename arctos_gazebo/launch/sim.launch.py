@@ -47,6 +47,23 @@ def generate_launch_description():
     rviz_config   = os.path.join(pkg_arctos_desc,   'rviz',   'arctos.rviz')
 
     # ------------------------------------------------------------------ #
+    # GZ_SIM_RESOURCE_PATH                                                 #
+    # Gazebo Harmonic resolves package:// URIs (meshes, etc.) by scanning  #
+    # GZ_SIM_RESOURCE_PATH for directories named after the package.        #
+    # We build it from AMENT_PREFIX_PATH (the ROS install prefixes) by     #
+    # appending /share to each prefix so Gazebo finds e.g.                 #
+    #   arctos_description/meshes/base_link.stl                            #
+    # Existing GZ_SIM_RESOURCE_PATH entries are preserved.                 #
+    # ------------------------------------------------------------------ #
+    ament_prefix_path = os.environ.get('AMENT_PREFIX_PATH', '')
+    gz_share_paths = [
+        os.path.join(p, 'share')
+        for p in ament_prefix_path.split(':') if p
+    ]
+    existing_gz_path = os.environ.get('GZ_SIM_RESOURCE_PATH', '')
+    gz_resource_path = ':'.join(filter(None, gz_share_paths + [existing_gz_path]))
+
+    # ------------------------------------------------------------------ #
     # Arguments                                                            #
     # ------------------------------------------------------------------ #
     rviz_arg = DeclareLaunchArgument(
@@ -84,7 +101,10 @@ def generate_launch_description():
     gz_sim = ExecuteProcess(
         cmd=['gz', 'sim', '-r', world_file],
         output='screen',
-        additional_env={'LIBGL_ALWAYS_SOFTWARE': '1'},
+        additional_env={
+            'LIBGL_ALWAYS_SOFTWARE': '1',
+            'GZ_SIM_RESOURCE_PATH': gz_resource_path,
+        },
     )
 
     # ------------------------------------------------------------------ #
@@ -190,7 +210,8 @@ def generate_launch_description():
         package='rviz2',
         executable='rviz2',
         name='rviz2',
-        arguments=['-d', rviz_config],
+        # Use the existing rviz config if present; fall back to no config
+        arguments=(['-d', rviz_config] if os.path.exists(rviz_config) else []),
         parameters=[{'use_sim_time': True}],
         additional_env={'LIBGL_ALWAYS_SOFTWARE': '1'},
         condition=IfCondition(LaunchConfiguration('rviz')),
