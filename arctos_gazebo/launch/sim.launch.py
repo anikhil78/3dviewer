@@ -79,9 +79,11 @@ def generate_launch_description():
     # gz-transport multicast discovery can fail to reach across them,     #
     # causing `ros_gz_sim create` to timeout waiting for world names even  #
     # when Gazebo is actually running.  Binding to loopback fixes this.   #
-    # setdefault leaves the variable unchanged if the user pre-set it.    #
+    # We force-set it here AND pass it explicitly via additional_env to   #
+    # every Gazebo-related process so there is no ambiguity.              #
     # ------------------------------------------------------------------ #
-    os.environ.setdefault('GZ_IP', '127.0.0.1')
+    gz_ip = os.environ.get('GZ_IP', '127.0.0.1')
+    os.environ['GZ_IP'] = gz_ip          # ensure the launch process itself has it
 
     # ------------------------------------------------------------------ #
     # Arguments                                                            #
@@ -123,6 +125,9 @@ def generate_launch_description():
         output='screen',
         emulate_tty=True,          # surface Gazebo stdout/stderr to the console
         additional_env={
+            # Bind gz-transport to loopback so it's reachable from ros_gz_sim.
+            # Must be explicit here; do NOT rely solely on os.environ propagation.
+            'GZ_IP': gz_ip,
             'LIBGL_ALWAYS_SOFTWARE': '1',
             # ogre2 software-rendering helpers (WSL2 / llvmpipe)
             'MESA_GL_VERSION_OVERRIDE': '3.3',
@@ -136,18 +141,20 @@ def generate_launch_description():
     # ------------------------------------------------------------------ #
     # Spawn the robot URDF into Gazebo                                     #
     # Reads /robot_description published by robot_state_publisher.         #
+    #                                                                      #
+    # Uses ExecuteProcess (not Node) so we can pass additional_env with   #
+    # GZ_IP explicitly — Node does not expose additional_env in Humble.   #
     # ------------------------------------------------------------------ #
-    spawn_robot = Node(
-        package='ros_gz_sim',
-        executable='create',
-        name='spawn_arctos',
-        arguments=[
+    spawn_robot = ExecuteProcess(
+        cmd=[
+            'ros2', 'run', 'ros_gz_sim', 'create',
             '-name',  'arctos',
             '-topic', '/robot_description',
             '-x', '0.0',
             '-y', '0.0',
             '-z', '0.0',
         ],
+        additional_env={'GZ_IP': gz_ip},
         output='screen',
     )
 
@@ -249,8 +256,8 @@ def generate_launch_description():
         robot_state_publisher,
         gz_sim,
         # Wait for Gazebo to finish loading the world before spawning.
-        # WSL2 + software rendering can take 15–30 s; 20 s is a safe floor.
-        TimerAction(period=20.0, actions=[spawn_robot]),
+        # WSL2 + software rendering can take 20–40 s; 40 s is a safe floor.
+        TimerAction(period=40.0, actions=[spawn_robot]),
         spawn_jsb_after_robot,
         spawn_arm_after_jsb,
         ros_gz_bridge,
