@@ -121,8 +121,12 @@ def generate_launch_description():
     gz_sim = ExecuteProcess(
         cmd=['gz', 'sim', '-r', world_file],
         output='screen',
+        emulate_tty=True,          # surface Gazebo stdout/stderr to the console
         additional_env={
             'LIBGL_ALWAYS_SOFTWARE': '1',
+            # ogre2 software-rendering helpers (WSL2 / llvmpipe)
+            'MESA_GL_VERSION_OVERRIDE': '3.3',
+            'OGRE_RTT_MODE': 'Copy',
             'GZ_SIM_RESOURCE_PATH': gz_resource_path,
             # Ensure Gazebo can find libgz_ros2_control-system.so
             'GZ_SIM_SYSTEM_PLUGIN_PATH': gz_plugin_path,

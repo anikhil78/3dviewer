@@ -20,10 +20,22 @@
             name="gz::sim::systems::UserCommands"/>
     <plugin filename="gz-sim-scene-broadcaster-system"
             name="gz::sim::systems::SceneBroadcaster"/>
+    <!--
+      Sensors plugin (ogre2) is disabled for Phase 1 while getting basic
+      robot spawning working in WSL2 software-rendering environments.
+      ogre2 initialisation hangs silently under llvmpipe / LIBGL_ALWAYS_SOFTWARE,
+      preventing gz-transport from becoming ready and causing `create` to
+      time out on "Requesting list of world names".
+
+      Re-enable AFTER confirming the robot spawns successfully.
+      See: https://github.com/gazebosim/gz-sim/issues/1727
+    -->
+    <!--
     <plugin filename="gz-sim-sensors-system"
             name="gz::sim::systems::Sensors">
       <render_engine>ogre2</render_engine>
     </plugin>
+    -->
     <plugin filename="gz-sim-contact-system"
             name="gz::sim::systems::Contact"/>
 
