@@ -34,6 +34,17 @@
   <!-- Visualisation (optional) -->
   <exec_depend>rviz2</exec_depend>
 
+  <!-- MoveIt 2 — motion planning, move_group, OMPL, RViz plugin -->
+  <exec_depend>moveit_ros_move_group</exec_depend>
+  <exec_depend>moveit_ros_planning_interface</exec_depend>
+  <exec_depend>moveit_ros_planning</exec_depend>
+  <exec_depend>moveit_kinematics</exec_depend>
+  <exec_depend>moveit_planners_ompl</exec_depend>
+  <exec_depend>moveit_simple_controller_manager</exec_depend>
+  <exec_depend>moveit_rviz_plugin</exec_depend>
+  <!-- Python bindings for move_arm_moveit.py (ros-humble-moveit-py) -->
+  <exec_depend>moveit_py</exec_depend>
+
   <export>
     <build_type>ament_cmake</build_type>
   </export>

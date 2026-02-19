@@ -17,4 +17,10 @@ install(PROGRAMS
   RENAME move_arm
 )
 
+install(PROGRAMS
+  scripts/move_arm_moveit.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME move_arm_moveit
+)
+
 ament_package()

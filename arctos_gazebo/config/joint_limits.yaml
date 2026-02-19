@@ -1,0 +1,47 @@
+# Joint limits for MoveIt motion planning.
+# Velocity scaling is kept conservative at 0.1 — raise toward 1.0 when confident.
+
+default_velocity_scaling_factor: 0.1
+default_acceleration_scaling_factor: 0.1
+
+joint_limits:
+  A_joint:
+    has_velocity_limits: true
+    max_velocity: 4.4
+    has_acceleration_limits: false
+    max_acceleration: 0.0
+  B_joint:
+    has_velocity_limits: true
+    max_velocity: 3.0
+    has_acceleration_limits: false
+    max_acceleration: 0.0
+  C_joint:
+    has_velocity_limits: true
+    max_velocity: 3.0
+    has_acceleration_limits: false
+    max_acceleration: 0.0
+  Left_jaw_joint:
+    has_velocity_limits: true
+    max_velocity: 1.0
+    has_acceleration_limits: false
+    max_acceleration: 0.0
+  Right_jaw_joint:
+    has_velocity_limits: true
+    max_velocity: 1.0
+    has_acceleration_limits: false
+    max_acceleration: 0.0
+  X_joint:
+    has_velocity_limits: true
+    max_velocity: 3.15
+    has_acceleration_limits: false
+    max_acceleration: 0.0
+  Y_joint:
+    has_velocity_limits: true
+    max_velocity: 3.15
+    has_acceleration_limits: false
+    max_acceleration: 0.0
+  Z_joint:
+    has_velocity_limits: true
+    max_velocity: 3.15
+    has_acceleration_limits: false
+    max_acceleration: 0.0

@@ -1,0 +1,33 @@
+# MoveIt controller manager configuration for the Gazebo simulation.
+#
+# NOTE: action_ns for arctos_hand_controller is "gripper_action" (not "gripper_cmd").
+# GripperActionController in ros2_control exposes its action at
+#   /arctos_hand_controller/gripper_action
+# The original hardware config used "gripper_cmd" for the real MKS driver —
+# that name does not exist in the simulation.
+
+moveit_controller_manager: moveit_simple_controller_manager/MoveItSimpleControllerManager
+
+moveit_simple_controller_manager:
+  controller_names:
+    - arctos_arm_controller
+    - arctos_hand_controller
+
+  arctos_arm_controller:
+    type: FollowJointTrajectory
+    joints:
+      - X_joint
+      - Y_joint
+      - Z_joint
+      - A_joint
+      - B_joint
+      - C_joint
+    action_ns: follow_joint_trajectory
+    default: true
+
+  arctos_hand_controller:
+    type: GripperCommand
+    joints:
+      - Left_jaw_joint
+    action_ns: gripper_action
+    default: true
