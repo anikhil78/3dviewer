@@ -92,7 +92,11 @@ rosdep install --from-paths src/gz_ros2_control --ignore-src -r -y \
 echo ""
 echo "[STEP 5] Building gz_ros2_control (this takes ~2 min)..."
 cd "$WS"
-colcon build \
+# GZ_VERSION=harmonic is required so CMakeLists.txt takes the gz-sim8 / gz-plugin2
+# branch (line 30: if("$ENV{GZ_VERSION}" STREQUAL "harmonic")).
+# Without it the build silently falls into the ignition-plugin1 else-branch and
+# the resulting .so is ABI-incompatible with gz-sim 8.
+GZ_VERSION=harmonic colcon build \
     --symlink-install \
     --packages-select gz_ros2_control \
     --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo \
@@ -103,11 +107,11 @@ if [ ${PIPESTATUS[0]} -ne 0 ]; then
     echo "[ERROR] Build failed. See /tmp/gz_ros2_control_build.log"
     echo ""
     echo "  Common causes:"
-    echo "  - Wrong branch: if 'humble' targets gz-sim 7 (Garden), try patching:"
-    echo "      sed -i 's/gz-sim7/gz-sim8/g; s/gz-plugin1/gz-plugin2/g' \\"
-    echo "        $WS/src/gz_ros2_control/CMakeLists.txt"
-    echo "    Then re-run this script."
+    echo "  - GZ_VERSION not set: the CMakeLists.txt gates on \$ENV{GZ_VERSION}."
+    echo "    This script sets it automatically; if running colcon manually, prefix:"
+    echo "      GZ_VERSION=harmonic colcon build ..."
     echo "  - Missing gz-sim8 dev headers: sudo apt install libgz-sim8-dev"
+    echo "  - Missing gz-plugin2 dev headers: sudo apt install libgz-plugin2-dev"
     exit 1
 fi
 
@@ -121,11 +125,11 @@ if [ -z "$PLUGIN_SO" ]; then
     echo "[WARN] Could not find libgz_ros2_control*.so in $WS/install"
 else
     echo "[INFO] Plugin path: $PLUGIN_SO"
-    if ldd "$PLUGIN_SO" 2>/dev/null | grep -q 'gz-plugin2\|libgz_plugin'; then
+    if ldd "$PLUGIN_SO" 2>/dev/null | grep -q 'libgz-plugin2\|libgz_plugin2'; then
         echo "[OK]   Links gz-plugin2 (correct for gz-sim 8)"
-    elif ldd "$PLUGIN_SO" 2>/dev/null | grep -q 'Ignition\|ign-plugin1'; then
-        echo "[WARN] Still links gz-plugin1 / IgnitionPlugin — wrong version built!"
-        echo "       Check that gz-sim8 dev headers were found, not gz-sim7."
+    elif ldd "$PLUGIN_SO" 2>/dev/null | grep -q 'libignition-plugin\|libign-plugin'; then
+        echo "[WARN] Still links ignition-plugin (gz-plugin 1.x) — wrong version built!"
+        echo "       Ensure GZ_VERSION=harmonic was set. Re-run this script."
     else
         # ldd output may use the versioned .so name — just print it
         echo "[INFO] ldd output:"
