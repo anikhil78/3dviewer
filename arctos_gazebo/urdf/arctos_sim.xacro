@@ -153,11 +153,11 @@
   <!-- entire workspace regardless of arm pose).                           -->
   <!--                                                                     -->
   <!-- Mount position (adjust to suit your physical setup):               -->
-  <!--   xyz="-0.20 0.0 0.45"  — 20 cm behind, 45 cm above base origin   -->
-  <!--                            clears the arm base/motor geometry       -->
-  <!--   rpy="0 -0.55 0"       — pitched ~31° downward (negative pitch =  -->
-  <!--                            look down); centres FOV on the table at  -->
-  <!--                            x≈0.4, z≈0.08 m                         -->
+  <!--   xyz="0.0 0.20 0.45"   — 20 cm in front, 45 cm above base origin  -->
+  <!--                            camera faces forward toward the table    -->
+  <!--   rpy="0 -0.55 1.5708"  — pitched ~31° down, yaw 90° to face +Y  -->
+  <!--                            (robot forward); centres FOV on table   -->
+  <!--                            at y≈0.4, z≈0.08 m                     -->
   <!--                                                                     -->
   <!-- D435 depth sensor parameters (848×480 mode):                       -->
   <!--   Horizontal FOV : 86°  (1.5009 rad)                               -->
@@ -197,7 +197,7 @@
     <child link="camera_link"/>
     <!-- Mounted behind and above the base, pitched downward to cover workspace.
          Tune xyz/rpy here if you physically relocate the camera. -->
-    <origin xyz="-0.20 0.0 0.45" rpy="0 -0.55 0"/>
+    <origin xyz="0.0 0.20 0.45" rpy="0 -0.55 1.5708"/>
   </joint>
 
   <!-- ROS optical frame convention: Z forward, X right, Y down.

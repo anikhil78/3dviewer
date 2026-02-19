@@ -92,15 +92,15 @@
 
     <!-- ============================================================ -->
     <!-- Test objects — positioned in the D435 camera's gaze zone.   -->
-    <!-- Camera is at (-0.20, 0, 0.45) on base_link, pitched 31°    -->
-    <!-- downward → gaze centre hits table at ~(0.45, 0, 0.05).     -->
-    <!-- All models are static so they don't fall or drift.          -->
+    <!-- Camera is at (0, 0.20, 0.45) on base_link, pitched 31°     -->
+    <!-- downward, yaw 90° → gaze centre hits table at ~(0, 0.4,    -->
+    <!-- 0.05).  All models are static so they don't fall or drift.  -->
     <!-- ============================================================ -->
 
     <!-- Table: 0.5×0.4×0.05 m, top surface at z=0.05 m -->
     <model name="table">
       <static>true</static>
-      <pose>0.4 0 0.025 0 0 0</pose>
+      <pose>0 0.4 0.025 0 0 0</pose>
       <link name="link">
         <collision name="collision">
           <geometry><box><size>0.5 0.4 0.05</size></box></geometry>
@@ -116,10 +116,10 @@
       </link>
     </model>
 
-    <!-- Red box: 6×6×8 cm, centre at (0.42, 0.08, 0.09) -->
+    <!-- Red box: 6×6×8 cm, centre at (0.02, 0.48, 0.09) -->
     <model name="red_box">
       <static>true</static>
-      <pose>0.42 0.08 0.09 0 0 0</pose>
+      <pose>0.02 0.48 0.09 0 0 0</pose>
       <link name="link">
         <collision name="collision">
           <geometry><box><size>0.06 0.06 0.08</size></box></geometry>
@@ -138,7 +138,7 @@
     <!-- Blue cylinder: radius=0.025 m, height=0.10 m -->
     <model name="blue_cylinder">
       <static>true</static>
-      <pose>0.32 -0.05 0.10 0 0 0</pose>
+      <pose>-0.08 0.35 0.10 0 0 0</pose>
       <link name="link">
         <collision name="collision">
           <geometry><cylinder><radius>0.025</radius><length>0.10</length></cylinder></geometry>
@@ -157,7 +157,7 @@
     <!-- Green sphere: radius=0.035 m -->
     <model name="green_sphere">
       <static>true</static>
-      <pose>0.45 -0.10 0.085 0 0 0</pose>
+      <pose>0.05 0.30 0.085 0 0 0</pose>
       <link name="link">
         <collision name="collision">
           <geometry><sphere><radius>0.035</radius></sphere></geometry>
