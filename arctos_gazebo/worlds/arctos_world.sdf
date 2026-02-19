@@ -47,6 +47,21 @@
       <direction>-0.5 0.1 -0.9</direction>
     </light>
 
+    <!-- Fill light — softens shadows cast toward the camera -->
+    <light name="fill" type="directional">
+      <cast_shadows>false</cast_shadows>
+      <pose>0 0 5 0 0 0</pose>
+      <diffuse>0.4 0.4 0.4 1</diffuse>
+      <specular>0.0 0.0 0.0 1</specular>
+      <attenuation>
+        <range>1000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>0.5 -0.1 -0.5</direction>
+    </light>
+
     <!-- Ground plane -->
     <model name="ground_plane">
       <static>true</static>
@@ -70,6 +85,89 @@
             <ambient>0.8 0.8 0.8 1</ambient>
             <diffuse>0.8 0.8 0.8 1</diffuse>
             <specular>0.8 0.8 0.8 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ============================================================ -->
+    <!-- Test objects — positioned in the D435 camera's gaze zone.   -->
+    <!-- Camera is at (-0.08, 0, 0.18) on base_link, pitched 20°    -->
+    <!-- downward → gaze centre hits ground at ~(0.41, 0, 0).        -->
+    <!-- All models are static so they don't fall or drift.          -->
+    <!-- ============================================================ -->
+
+    <!-- Table: 0.5×0.4×0.05 m, top surface at z=0.05 m -->
+    <model name="table">
+      <static>true</static>
+      <pose>0.4 0 0.025 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>0.5 0.4 0.05</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.5 0.4 0.05</size></box></geometry>
+          <material>
+            <ambient>0.55 0.45 0.35 1</ambient>
+            <diffuse>0.55 0.45 0.35 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Red box: 6×6×8 cm, centre at (0.42, 0.08, 0.09) -->
+    <model name="red_box">
+      <static>true</static>
+      <pose>0.42 0.08 0.09 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>0.06 0.06 0.08</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.06 0.06 0.08</size></box></geometry>
+          <material>
+            <ambient>0.85 0.1 0.1 1</ambient>
+            <diffuse>0.85 0.1 0.1 1</diffuse>
+            <specular>0.3 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Blue cylinder: radius=0.025 m, height=0.10 m -->
+    <model name="blue_cylinder">
+      <static>true</static>
+      <pose>0.32 -0.05 0.10 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><cylinder><radius>0.025</radius><length>0.10</length></cylinder></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><cylinder><radius>0.025</radius><length>0.10</length></cylinder></geometry>
+          <material>
+            <ambient>0.1 0.1 0.85 1</ambient>
+            <diffuse>0.1 0.1 0.85 1</diffuse>
+            <specular>0.1 0.1 0.3 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Green sphere: radius=0.035 m -->
+    <model name="green_sphere">
+      <static>true</static>
+      <pose>0.45 -0.10 0.085 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><sphere><radius>0.035</radius></sphere></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><sphere><radius>0.035</radius></sphere></geometry>
+          <material>
+            <ambient>0.1 0.8 0.1 1</ambient>
+            <diffuse>0.1 0.8 0.1 1</diffuse>
+            <specular>0.1 0.3 0.1 1</specular>
           </material>
         </visual>
       </link>
