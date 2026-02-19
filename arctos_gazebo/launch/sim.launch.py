@@ -153,6 +153,21 @@ def generate_launch_description():
     )
 
     # ------------------------------------------------------------------ #
+    # Static TF: world → base_link                                        #
+    # robot_state_publisher publishes transforms relative to base_link   #
+    # but publishes no world-frame anchor. Without this, RViz2 cannot    #
+    # locate camera_optical_frame (or any robot frame) in the world      #
+    # frame, making the point cloud invisible.                            #
+    # ------------------------------------------------------------------ #
+    world_to_base = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='world_to_base_link',
+        arguments=['0', '0', '0', '0', '0', '0', 'world', 'base_link'],
+        parameters=[{'use_sim_time': True}],
+    )
+
+    # ------------------------------------------------------------------ #
     # robot_state_publisher                                                #
     # Use the already-generated URDF string directly rather than running  #
     # xacro again via Command substitution.                               #
@@ -281,6 +296,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         rviz_arg,
+        world_to_base,
         robot_state_publisher,
         gz_sim,
         # Wait 30 s for Gazebo + gz_ros2_control plugin to initialise,
