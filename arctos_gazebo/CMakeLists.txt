@@ -11,4 +11,10 @@ install(DIRECTORY
   DESTINATION share/${PROJECT_NAME}
 )
 
+install(PROGRAMS
+  scripts/move_arm.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME move_arm
+)
+
 ament_package()
