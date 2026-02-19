@@ -124,20 +124,18 @@ def generate_launch_description():
 
     # ------------------------------------------------------------------ #
     # GZ_SIM_SYSTEM_PLUGIN_PATH                                           #
-    # Priority order (first wins):                                        #
-    #   1. ~/ros2_ws  — gz_ros2_control built from source (gz-plugin 2.x) #
-    #   2. /opt/ros/humble/lib — system install (gz-plugin 1.x, broken)  #
-    #   3. GZ_SIM_SYSTEM_PLUGIN_PATH from environment                     #
-    # Sourcing ~/ros2_ws/install/setup.bash also sets this automatically, #
-    # but we set it explicitly here so the launch file is self-contained. #
+    # Prepend the source-built gz_ros2_control path so Gazebo finds the  #
+    # correct gz-plugin 2.x build before any system paths.               #
+    # Gazebo's own plugin dirs (/usr/lib/.../gz-sim-8/plugins) are always #
+    # searched regardless — this env var is purely additive.             #
+    # Do NOT add /opt/ros/humble/lib — that package has been removed.    #
     # ------------------------------------------------------------------ #
     home_dir = os.path.expanduser('~')
     ws_plugin_path = os.path.join(home_dir, 'ros2_ws', 'install', 'gz_ros2_control', 'lib')
     existing_gz_plugin_path = os.environ.get('GZ_SIM_SYSTEM_PLUGIN_PATH', '')
     gz_plugin_path = ':'.join(filter(None, [
-        ws_plugin_path,           # source-built (correct, gz-plugin 2.x)
-        '/opt/ros/humble/lib',    # system fallback (may be wrong version)
-        existing_gz_plugin_path,
+        ws_plugin_path,           # source-built gz_ros2_control (gz-plugin 2.x)
+        existing_gz_plugin_path,  # from sourcing ~/ros2_ws/install/setup.bash
     ]))
 
     # ------------------------------------------------------------------ #
