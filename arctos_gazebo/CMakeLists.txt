@@ -23,4 +23,10 @@ install(PROGRAMS
   RENAME move_arm_moveit
 )
 
+install(PROGRAMS
+  scripts/vision_processor.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME vision_processor
+)
+
 ament_package()

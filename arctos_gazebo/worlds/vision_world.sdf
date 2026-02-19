@@ -1,0 +1,229 @@
+<?xml version="1.0"?>
+<!--
+  vision_world.sdf
+  Standalone vision simulation world — no robot arm.
+
+  Contains:
+    - Ground plane
+    - Grey table (0.6 × 0.4 × 0.05 m, top surface at z = 0.05 m)
+    - Three distinctly coloured sample objects on the table:
+        red_box       — 0.06 × 0.06 × 0.08 m box
+        blue_cylinder — radius 0.025 m, height 0.10 m cylinder
+        green_sphere  — radius 0.035 m sphere
+    - The camera model is injected via <include> by vision_sim.launch.py
+      (same mechanism used for the arm in arctos_world.sdf)
+
+  Object positions are chosen so all three fit comfortably within the
+  camera's 60° FOV when mounted at (0.4, 0, 0.42) pitched 40° downward.
+
+  To add more objects or change object positions, edit the model poses below.
+  Object centre heights:
+    red_box       z = 0.05 (table top) + 0.04 (half height) = 0.09
+    blue_cylinder z = 0.05            + 0.05                = 0.10
+    green_sphere  z = 0.05            + 0.035               = 0.085
+-->
+<sdf version="1.9">
+  <world name="vision_world">
+
+    <!-- Physics: DART at 1 kHz (same as arctos_world) -->
+    <physics name="1ms" type="dart">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <!-- Required system plugins -->
+    <plugin filename="gz-sim-physics-system"
+            name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-user-commands-system"
+            name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system"
+            name="gz::sim::systems::SceneBroadcaster"/>
+    <!-- ogre (1.x) for WSL2 software rendering — same as arctos_world -->
+    <plugin filename="gz-sim-sensors-system"
+            name="gz::sim::systems::Sensors">
+      <render_engine>ogre</render_engine>
+    </plugin>
+    <plugin filename="gz-sim-contact-system"
+            name="gz::sim::systems::Contact"/>
+
+    <!-- Lighting -->
+    <light name="sun" type="directional">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.9 0.9 0.9 1</diffuse>
+      <specular>0.3 0.3 0.3 1</specular>
+      <attenuation>
+        <range>1000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- Second fill light from the opposite side for better object colour -->
+    <light name="fill" type="directional">
+      <cast_shadows>false</cast_shadows>
+      <pose>0 0 5 0 0 0</pose>
+      <diffuse>0.4 0.4 0.4 1</diffuse>
+      <specular>0.0 0.0 0.0 1</specular>
+      <direction>0.5 -0.1 -0.5</direction>
+    </light>
+
+    <!-- ================================================================ -->
+    <!-- Ground plane                                                      -->
+    <!-- ================================================================ -->
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>20 20</size>
+            </plane>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>20 20</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>0.6 0.6 0.6 1</ambient>
+            <diffuse>0.6 0.6 0.6 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ================================================================ -->
+    <!-- Table — 0.6 × 0.4 × 0.05 m, top surface at z = 0.05 m          -->
+    <!-- ================================================================ -->
+    <model name="table">
+      <static>true</static>
+      <pose>0 0 0.025 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box><size>0.6 0.4 0.05</size></box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>0.6 0.4 0.05</size></box>
+          </geometry>
+          <material>
+            <ambient>0.55 0.45 0.35 1</ambient>
+            <diffuse>0.55 0.45 0.35 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ================================================================ -->
+    <!-- Sample object 1 — RED BOX                                        -->
+    <!-- 0.06 × 0.06 × 0.08 m, centre at (0.06, 0.09, 0.09)             -->
+    <!-- Represents a pick target in the workspace                        -->
+    <!-- ================================================================ -->
+    <model name="red_box">
+      <static>false</static>
+      <pose>0.06 0.09 0.09 0 0 0</pose>
+      <link name="link">
+        <inertial>
+          <mass>0.1</mass>
+          <inertia>
+            <ixx>0.000053</ixx><iyy>0.000053</iyy><izz>0.000060</izz>
+            <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry>
+            <box><size>0.06 0.06 0.08</size></box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>0.06 0.06 0.08</size></box>
+          </geometry>
+          <material>
+            <ambient>0.85 0.1 0.1 1</ambient>
+            <diffuse>0.85 0.1 0.1 1</diffuse>
+            <specular>0.3 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ================================================================ -->
+    <!-- Sample object 2 — BLUE CYLINDER                                  -->
+    <!-- radius=0.025 m, height=0.10 m, centre at (-0.08, -0.05, 0.10)  -->
+    <!-- ================================================================ -->
+    <model name="blue_cylinder">
+      <static>false</static>
+      <pose>-0.08 -0.05 0.10 0 0 0</pose>
+      <link name="link">
+        <inertial>
+          <mass>0.08</mass>
+          <inertia>
+            <ixx>0.000079</ixx><iyy>0.000079</iyy><izz>0.000025</izz>
+            <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry>
+            <cylinder><radius>0.025</radius><length>0.10</length></cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder><radius>0.025</radius><length>0.10</length></cylinder>
+          </geometry>
+          <material>
+            <ambient>0.1 0.1 0.85 1</ambient>
+            <diffuse>0.1 0.1 0.85 1</diffuse>
+            <specular>0.1 0.1 0.3 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ================================================================ -->
+    <!-- Sample object 3 — GREEN SPHERE                                   -->
+    <!-- radius=0.035 m, centre at (0.07, -0.10, 0.085)                  -->
+    <!-- ================================================================ -->
+    <model name="green_sphere">
+      <static>false</static>
+      <pose>0.07 -0.10 0.085 0 0 0</pose>
+      <link name="link">
+        <inertial>
+          <mass>0.06</mass>
+          <inertia>
+            <ixx>0.000029</ixx><iyy>0.000029</iyy><izz>0.000029</izz>
+            <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry>
+            <sphere><radius>0.035</radius></sphere>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <sphere><radius>0.035</radius></sphere>
+          </geometry>
+          <material>
+            <ambient>0.1 0.8 0.1 1</ambient>
+            <diffuse>0.1 0.8 0.1 1</diffuse>
+            <specular>0.1 0.3 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+  </world>
+</sdf>
