@@ -99,6 +99,7 @@ cd "$WS"
 GZ_VERSION=harmonic colcon build \
     --symlink-install \
     --packages-select gz_ros2_control \
+    --allow-overriding gz_ros2_control \
     --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     2>&1 | tee /tmp/gz_ros2_control_build.log
 
