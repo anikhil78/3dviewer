@@ -124,18 +124,23 @@ def generate_launch_description():
 
     # ------------------------------------------------------------------ #
     # GZ_SIM_SYSTEM_PLUGIN_PATH                                           #
-    # Prepend the source-built gz_ros2_control path so Gazebo finds the  #
+    # Prepend the source-built gz_ros2_control paths so Gazebo finds the #
     # correct gz-plugin 2.x build before any system paths.               #
+    # The BUILD directory is listed first because gz-sim's SystemLoader  #
+    # does not always follow symlinks when scanning plugin dirs, so the  #
+    # real .so files must be reachable via a non-symlink path.           #
     # Gazebo's own plugin dirs (/usr/lib/.../gz-sim-8/plugins) are always #
     # searched regardless — this env var is purely additive.             #
     # Do NOT add /opt/ros/humble/lib — that package has been removed.    #
     # ------------------------------------------------------------------ #
     home_dir = os.path.expanduser('~')
-    ws_plugin_path = os.path.join(home_dir, 'ros2_ws', 'install', 'gz_ros2_control', 'lib')
+    ws_install_lib = os.path.join(home_dir, 'ros2_ws', 'install', 'gz_ros2_control', 'lib')
+    ws_build_lib   = os.path.join(home_dir, 'ros2_ws', 'build',   'gz_ros2_control')
     existing_gz_plugin_path = os.environ.get('GZ_SIM_SYSTEM_PLUGIN_PATH', '')
     gz_plugin_path = ':'.join(filter(None, [
-        ws_plugin_path,           # source-built gz_ros2_control (gz-plugin 2.x)
-        existing_gz_plugin_path,  # from sourcing ~/ros2_ws/install/setup.bash
+        ws_build_lib,             # actual .so files (gz-sim does not always follow symlinks)
+        ws_install_lib,           # install-tree symlinks (belt-and-suspenders)
+        existing_gz_plugin_path,  # anything already on the path
     ]))
 
     # ------------------------------------------------------------------ #
