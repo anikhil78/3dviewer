@@ -95,11 +95,16 @@ MIN_BLOB_PX = 200
 
 
 class VisionProcessor(Node):
-    def __init__(self, topic_prefix: str, debug: bool):
+    def __init__(self, topic_prefix: str, debug: bool,
+                 depth_topic: str = None, info_topic: str = None):
         super().__init__('vision_processor')
         self._bridge = CvBridge()
         self._debug  = debug
         self._prefix = topic_prefix.rstrip('/')
+        # Allow overriding individual topics for real hardware whose driver
+        # (e.g. realsense-ros) splits colour and depth into different namespaces.
+        _depth = depth_topic or f'{self._prefix}/depth_image'
+        _info  = info_topic  or f'{self._prefix}/camera_info'
 
         # Camera intrinsics — populated on first CameraInfo message.
         self._fx = self._fy = self._cx = self._cy = None
@@ -121,18 +126,13 @@ class VisionProcessor(Node):
         )
 
         self._info_sub = self.create_subscription(
-            CameraInfo,
-            f'{self._prefix}/camera_info',
-            self._camera_info_cb,
-            sensor_qos,
-        )
+            CameraInfo, _info, self._camera_info_cb, sensor_qos)
 
         img_sub   = message_filters.Subscriber(
             self, Image, f'{self._prefix}/image',
             qos_profile=sensor_qos)
         depth_sub = message_filters.Subscriber(
-            self, Image, f'{self._prefix}/depth_image',
-            qos_profile=sensor_qos)
+            self, Image, _depth, qos_profile=sensor_qos)
 
         self._sync = message_filters.ApproximateTimeSynchronizer(
             [img_sub, depth_sub], queue_size=5, slop=0.05)
@@ -149,9 +149,13 @@ class VisionProcessor(Node):
         self.get_logger().info(
             f'VisionProcessor ready — prefix={self._prefix}, debug={debug}')
         self.get_logger().info(
-            f'  Subscribing to {self._prefix}/image + {self._prefix}/depth_image')
+            f'  colour : {self._prefix}/image')
         self.get_logger().info(
-            f'  Publishing to  {self._prefix}/detected_objects')
+            f'  depth  : {_depth}')
+        self.get_logger().info(
+            f'  info   : {_info}')
+        self.get_logger().info(
+            f'  output : {self._prefix}/detected_objects')
 
     # ---------------------------------------------------------------- #
     # Camera intrinsics callback                                         #
@@ -380,11 +384,24 @@ def main():
     parser.add_argument(
         '--topic-prefix', default='/vision', metavar='PREFIX',
         help='ROS topic namespace prefix (default: /vision)')
+    parser.add_argument(
+        '--depth-topic', default=None, metavar='TOPIC',
+        help='Override depth image topic. Use when driver splits namespaces, '
+             'e.g. --depth-topic /camera/depth/image_rect_raw')
+    parser.add_argument(
+        '--info-topic', default=None, metavar='TOPIC',
+        help='Override camera_info topic, '
+             'e.g. --info-topic /camera/color/camera_info')
     # ros2 run passes args after "--"
     args, _ = parser.parse_known_args()
 
     rclpy.init()
-    node = VisionProcessor(topic_prefix=args.topic_prefix, debug=args.debug)
+    node = VisionProcessor(
+        topic_prefix=args.topic_prefix,
+        debug=args.debug,
+        depth_topic=args.depth_topic,
+        info_topic=args.info_topic,
+    )
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
