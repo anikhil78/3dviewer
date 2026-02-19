@@ -92,8 +92,8 @@
 
     <!-- ============================================================ -->
     <!-- Test objects — positioned in the D435 camera's gaze zone.   -->
-    <!-- Camera is at (-0.08, 0, 0.18) on base_link, pitched 20°    -->
-    <!-- downward → gaze centre hits ground at ~(0.41, 0, 0).        -->
+    <!-- Camera is at (-0.20, 0, 0.45) on base_link, pitched 31°    -->
+    <!-- downward → gaze centre hits table at ~(0.45, 0, 0.05).     -->
     <!-- All models are static so they don't fall or drift.          -->
     <!-- ============================================================ -->
 
