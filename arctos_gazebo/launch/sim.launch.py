@@ -164,7 +164,11 @@ def generate_launch_description():
         executable='static_transform_publisher',
         name='world_to_base_link',
         arguments=['0', '0', '0', '0', '0', '0', 'world', 'base_link'],
-        parameters=[{'use_sim_time': True}],
+        # Do NOT set use_sim_time here: static_transform_publisher will not
+        # publish any transform until it receives a /clock message, creating a
+        # deadlock where RViz2 can never resolve the world frame before Gazebo
+        # is fully up.  Static transforms are time-independent so wall-clock is
+        # correct regardless.
     )
 
     # ------------------------------------------------------------------ #
