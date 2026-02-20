@@ -172,7 +172,7 @@ def generate_launch_description():
             '/vision/points@sensor_msgs/msg/PointCloud2[gz.msgs.PointCloudPacked',
         ],
         output='screen',
-        parameters=[{'use_sim_time': True}],
+        parameters=[{'use_sim_time': True, 'lazy': False}],
         additional_env={'GZ_IP': '127.0.0.1'},
     )
 
