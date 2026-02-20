@@ -74,7 +74,7 @@
     Intel RealSense L515 LiDAR sensor.
 
     Spec        Real L515        Simulated here
-    ---------   --------         ----------------
+    =========   ========         ================
     H FOV       70°              70° (1.2217 rad)
     V FOV       55°              55° (aspect ratio 640×480 ≈ 4:3 ≈ 56°)
     Depth res   1024 × 768       640 × 480  (same FOV, lighter for WSL2)
