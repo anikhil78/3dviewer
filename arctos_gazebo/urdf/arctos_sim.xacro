@@ -29,135 +29,59 @@
     </hardware>
 
     <!--
-      PD gains for GazeboSimSystem position control.
+      Arm joints use EFFORT command interface.
 
-      GazeboSimSystem converts position commands to joint forces via a PD
-      loop: force = p*(q_cmd - q) + d*(dq_cmd - dq).  Without these params
-      both gains default to 0 and the controller applies zero force — the
-      arm falls under gravity regardless of what the trajectory controller
-      commands.
+      GazeboSimSystem passes the effort command directly to DART as a joint
+      torque via JointForceCmd — no internal PID, no kinematic tricks.
+      The PID loop (position error → effort) lives in the JointTrajectoryController
+      and is configured in sim_controllers.yaml under gains:.
 
-      Tuning guide (scale proportionally to link mass × reach²):
-        p  — stiffness.  Too low → arm droops under gravity.
-             Too high → high-frequency oscillation.
-        d  — damping.  ~10 % of p is a safe starting point.
-             Too low → ringing.  Too high → sluggish / overdamped.
-        i  — leave at 0 for simulation; integral windup destabilises DART.
+      Why NOT position interface?
+        In gz_ros2_control for gz-sim Harmonic, position commands are applied
+        via JointPositionReset, a kinematic teleport.  If DART has accumulated
+        even a small joint velocity beforehand, the teleport creates a large
+        constraint impulse that can violate joint constraints and cause links
+        to fly apart.  Additionally, the <param name="p/d"> values in the URDF
+        <joint> block are a Gazebo Classic artifact — gz_ros2_control ignores them.
 
-      These gains are SIMULATION-ONLY and have no effect on real hardware.
+      With effort interface, the torque is injected into DART's integrator
+      each step.  Gravity is counteracted by the PID error signal.  No
+      teleportation, no constraint impulse, no flying links.
     -->
 
-    <!-- X_joint — base yaw: moderate load (whole-arm inertia about vertical) -->
     <joint name="X_joint">
-      <param name="p">500</param>
-      <param name="i">0</param>
-      <param name="d">50</param>
-      <command_interface name="position">
-        <param name="min">-3.14159265</param>
-        <param name="max">3.14159265</param>
-      </command_interface>
-      <command_interface name="velocity">
-        <param name="min">-3.15</param>
-        <param name="max">3.15</param>
-      </command_interface>
-      <state_interface name="position">
-        <param name="initial_value">0.0</param>
-      </state_interface>
+      <command_interface name="effort"/>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
       <state_interface name="velocity"/>
     </joint>
 
-    <!-- Y_joint — shoulder pitch: highest gravity torque, needs stiffest gains -->
     <joint name="Y_joint">
-      <param name="p">1000</param>
-      <param name="i">0</param>
-      <param name="d">100</param>
-      <command_interface name="position">
-        <param name="min">-0.96</param>
-        <param name="max">2.18</param>
-      </command_interface>
-      <command_interface name="velocity">
-        <param name="min">-3.15</param>
-        <param name="max">3.15</param>
-      </command_interface>
-      <state_interface name="position">
-        <param name="initial_value">0.0</param>
-      </state_interface>
+      <command_interface name="effort"/>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
       <state_interface name="velocity"/>
     </joint>
 
-    <!-- Z_joint — elbow pitch: significant gravity torque from forearm + wrist -->
     <joint name="Z_joint">
-      <param name="p">600</param>
-      <param name="i">0</param>
-      <param name="d">60</param>
-      <command_interface name="position">
-        <param name="min">-1.5708</param>
-        <param name="max">0.9599</param>
-      </command_interface>
-      <command_interface name="velocity">
-        <param name="min">-3.15</param>
-        <param name="max">3.15</param>
-      </command_interface>
-      <state_interface name="position">
-        <param name="initial_value">0.0</param>
-      </state_interface>
+      <command_interface name="effort"/>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
       <state_interface name="velocity"/>
     </joint>
 
-    <!-- A_joint — wrist pitch: light load (wrist + gripper only) -->
     <joint name="A_joint">
-      <param name="p">200</param>
-      <param name="i">0</param>
-      <param name="d">20</param>
-      <command_interface name="position">
-        <param name="min">-1.5708</param>
-        <param name="max">1.5708</param>
-      </command_interface>
-      <command_interface name="velocity">
-        <param name="min">-3.2</param>
-        <param name="max">3.2</param>
-      </command_interface>
-      <state_interface name="position">
-        <param name="initial_value">0.0</param>
-      </state_interface>
+      <command_interface name="effort"/>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
       <state_interface name="velocity"/>
     </joint>
 
-    <!-- B_joint — wrist roll: negligible gravity torque, moderate damping -->
     <joint name="B_joint">
-      <param name="p">200</param>
-      <param name="i">0</param>
-      <param name="d">20</param>
-      <command_interface name="position">
-        <param name="min">-1.55</param>
-        <param name="max">1.55</param>
-      </command_interface>
-      <command_interface name="velocity">
-        <param name="min">-3.2</param>
-        <param name="max">3.2</param>
-      </command_interface>
-      <state_interface name="position">
-        <param name="initial_value">0.0</param>
-      </state_interface>
+      <command_interface name="effort"/>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
       <state_interface name="velocity"/>
     </joint>
 
-    <!-- C_joint — tool roll: end-of-chain, very light load -->
     <joint name="C_joint">
-      <param name="p">100</param>
-      <param name="i">0</param>
-      <param name="d">10</param>
-      <command_interface name="position">
-        <param name="min">-3.14159265</param>
-        <param name="max">3.14159265</param>
-      </command_interface>
-      <command_interface name="velocity">
-        <param name="min">-3.2</param>
-        <param name="max">3.2</param>
-      </command_interface>
-      <state_interface name="position">
-        <param name="initial_value">0.0</param>
-      </state_interface>
+      <command_interface name="effort"/>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
       <state_interface name="velocity"/>
     </joint>
 
