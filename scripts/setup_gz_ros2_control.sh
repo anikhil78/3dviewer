@@ -63,6 +63,44 @@ echo "[STEP 2] Creating workspace at $WS ..."
 mkdir -p "$WS/src"
 
 # --------------------------------------------------------------------------- #
+# 2b. Clone arctos_description from the upstream robot repo (sparse checkout) #
+#                                                                              #
+# arctos_sim.xacro includes $(find arctos_description)/urdf/arctos.xacro.    #
+# Without this package in the workspace, xacro expansion fails immediately    #
+# at launch with "Package 'arctos_description' not found".                    #
+# Sparse checkout downloads only the arctos_description/ subdirectory.        #
+# --------------------------------------------------------------------------- #
+ARCTOS_UPSTREAM_REPO="https://github.com/altairkaitou/robot_arctos_HCMUT.git"
+ARCTOS_UPSTREAM_BRANCH="dev-windows"
+ARCTOS_DESC_SRC="$WS/src/robot_arctos_HCMUT"
+ARCTOS_DESC_LINK="$WS/src/arctos_description"
+
+echo ""
+if [ -d "$ARCTOS_DESC_SRC/.git" ]; then
+    echo "[STEP 2b] robot_arctos_HCMUT already cloned — pulling latest arctos_description..."
+    git -C "$ARCTOS_DESC_SRC" fetch origin "$ARCTOS_UPSTREAM_BRANCH"
+    git -C "$ARCTOS_DESC_SRC" checkout "$ARCTOS_UPSTREAM_BRANCH"
+    git -C "$ARCTOS_DESC_SRC" pull origin "$ARCTOS_UPSTREAM_BRANCH"
+else
+    echo "[STEP 2b] Sparse-cloning arctos_description from upstream repo..."
+    git clone \
+        --branch "$ARCTOS_UPSTREAM_BRANCH" \
+        --depth 1 \
+        --filter=blob:none \
+        --sparse \
+        "$ARCTOS_UPSTREAM_REPO" \
+        "$ARCTOS_DESC_SRC"
+    git -C "$ARCTOS_DESC_SRC" sparse-checkout set arctos_description
+fi
+
+if [ ! -L "$ARCTOS_DESC_LINK" ] && [ ! -d "$ARCTOS_DESC_LINK" ]; then
+    echo "[STEP 2b] Symlinking arctos_description into workspace..."
+    ln -s "$ARCTOS_DESC_SRC/arctos_description" "$ARCTOS_DESC_LINK"
+else
+    echo "[STEP 2b] arctos_description already in workspace — skipping symlink."
+fi
+
+# --------------------------------------------------------------------------- #
 # 3. Clone or update gz_ros2_control                                          #
 # --------------------------------------------------------------------------- #
 echo ""
@@ -82,9 +120,11 @@ fi
 echo ""
 echo "[STEP 4] Installing dependencies via rosdep..."
 cd "$WS"
-rosdep install --from-paths src/gz_ros2_control --ignore-src -r -y \
-    --rosdistro "$ROS_DISTRO" || true   # 'true' so script continues if some
-                                         # deps are already satisfied
+# Include both gz_ros2_control and arctos_description in the rosdep scan
+rosdep install \
+    --from-paths src/gz_ros2_control src/arctos_description \
+    --ignore-src -r -y \
+    --rosdistro "$ROS_DISTRO" || true
 
 # --------------------------------------------------------------------------- #
 # 5. Build                                                                     #
@@ -155,10 +195,22 @@ else
 fi
 
 # --------------------------------------------------------------------------- #
-# 8. Build arctos_gazebo                                                       #
+# 8. Build arctos_description then arctos_gazebo                              #
+#                                                                             #
+# arctos_description must be built first so that 'ros2 pkg prefix             #
+# arctos_description' resolves during the arctos_gazebo build.                #
 # --------------------------------------------------------------------------- #
 echo ""
-echo "[STEP 8] Building arctos_gazebo..."
+echo "[STEP 8] Building arctos_description..."
+source "$WS/install/setup.bash"
+cd "$WS"
+colcon build \
+    --symlink-install \
+    --packages-select arctos_description \
+    --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo
+
+echo ""
+echo "[STEP 8b] Building arctos_gazebo..."
 source "$WS/install/setup.bash"
 cd "$WS"
 colcon build \

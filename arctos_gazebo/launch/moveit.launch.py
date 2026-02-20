@@ -119,8 +119,11 @@ def generate_launch_description():
         #   moveit_simple_controller_manager  (dict)
         controllers,
         {'use_sim_time': True},
-        # Enable capability plugins needed for the RViz panel
-        {'move_group/capabilities': ' '.join([
+        # Enable capability plugins needed for the RViz panel.
+        # In MoveIt2/ROS2 the node parameter is simply 'capabilities' (no
+        # 'move_group/' prefix).  Using 'move_group/capabilities' would set a
+        # parameter with a literal slash in its name which move_group never reads.
+        {'capabilities': ' '.join([
             'move_group/MoveGroupCartesianPathService',
             'move_group/MoveGroupExecuteTrajectoryAction',
             'move_group/MoveGroupGetPlanningSceneService',
