@@ -129,6 +129,35 @@
       <state_interface name="velocity"/>
     </joint>
 
+    <!--
+      Right_jaw_joint: mimic of Left_jaw_joint via gz_ros2_control software mimic.
+
+      DART physics (used by Gazebo Harmonic) does not support SDF-level mimic
+      constraints, so the physics engine logs an error and leaves Right_jaw_joint
+      uncontrolled.  By declaring it here with <param name="mimic">, GazeboSimSystem
+      commands Right_jaw_joint directly each physics step to track Left_jaw_joint,
+      bypassing the physics-engine constraint entirely.
+
+      multiplier: adjust sign/scale to match your URDF convention.
+        multiplier= 1  → Right jaw moves in the same angular direction as Left jaw
+        multiplier=-1  → Right jaw moves in the opposite angular direction (typical
+                         for symmetric parallel grippers where both jaws open outward)
+      Check arctos_description/urdf/arctos.xacro <mimic multiplier="…"> attribute
+      for the correct value; the default here is -1 for a symmetric parallel gripper.
+    -->
+    <joint name="Right_jaw_joint">
+      <param name="mimic">Left_jaw_joint</param>
+      <param name="multiplier">-1</param>
+      <command_interface name="position">
+        <param name="min">-0.015</param>
+        <param name="max">0.0</param>
+      </command_interface>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+
   </ros2_control>
 
   <!-- ================================================================== -->

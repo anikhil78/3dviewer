@@ -12,7 +12,7 @@ to the physical arm without code changes.
      WSL2; the SDF-include path bypasses this entirely)
   3. Starts Gazebo Harmonic with the patched world SDF
   4. Starts robot_state_publisher with the same URDF string
-  5. Waits 30 s for Gazebo + gz_ros2_control plugin to initialise, then spawns
+  5. Waits 10 s for Gazebo + gz_ros2_control plugin to initialise, then spawns
      controllers in order:
        joint_state_broadcaster  → publishes /joint_states from sim
        arctos_arm_controller    → joint_trajectory_controller (position, 6 DOF)
@@ -32,7 +32,7 @@ Usage:
   ros2 launch arctos_gazebo sim.launch.py
   ros2 launch arctos_gazebo sim.launch.py rviz:=false
 
-Verify controllers after ~35 s:
+Verify controllers after ~15 s:
   ros2 control list_controllers
 """
 
@@ -211,7 +211,7 @@ def generate_launch_description():
     # ------------------------------------------------------------------ #
     # ros2_control controllers                                             #
     # gz_ros2_control starts controller_manager inside Gazebo when the   #
-    # robot model loads. We wait 30 s for Gazebo + plugin to initialise, #
+    # robot model loads. We wait 10 s for Gazebo + plugin to initialise, #
     # then spawn controllers in order.                                    #
     #                                                                     #
     # IMPORTANT: requires gz_ros2_control built against gz-plugin 2.x.   #
@@ -314,10 +314,16 @@ def generate_launch_description():
         world_to_base,
         robot_state_publisher,
         gz_sim,
-        # Wait 30 s for Gazebo + gz_ros2_control plugin to initialise,
+        # Wait 10 s for Gazebo + gz_ros2_control plugin to initialise,
         # then spawn controllers. The robot is already in the world SDF so
         # no separate spawn step is needed.
-        TimerAction(period=30.0, actions=[joint_state_broadcaster_spawner]),
+        # 10 s is sufficient now that gz_ros2_control is built against
+        # gz-plugin 2.x (GzPluginHook) — the plugin loads within 2-3 s on
+        # typical hardware.  Keeping some headroom avoids a race where the
+        # spawner starts before controller_manager has finished registering.
+        # The spawner itself retries every ~10 s if the service is not yet
+        # available, so this value only affects the initial wait.
+        TimerAction(period=10.0, actions=[joint_state_broadcaster_spawner]),
         spawn_arm_after_jsb,
         ros_gz_bridge,
         point_cloud_node,
