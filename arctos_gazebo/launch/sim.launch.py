@@ -104,7 +104,10 @@ def generate_launch_description():
         '    <include>\n'
         f'      <uri>file://{urdf_path}</uri>\n'
         '      <name>arctos</name>\n'
-        '      <pose>0 0 0 0 0 0</pose>\n'
+        # 1 mm above ground: prevents the base collision mesh from being exactly
+        # flush with z=0, which causes DART to generate a large corrective impulse
+        # on the very first physics step and blow a joint constraint apart.
+        '      <pose>0 0 0.001 0 0 0</pose>\n'
         '    </include>\n'
         '  '
     )

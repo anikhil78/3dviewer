@@ -7,10 +7,18 @@
 <sdf version="1.9">
   <world name="arctos_world">
 
-    <!-- Physics: DART engine at 1 kHz for stable arm simulation -->
+    <!-- Physics: DART engine at 1 kHz for stable arm simulation.
+         max_iterations: increase from default (50) to give the constraint
+         solver more attempts to resolve contacts without resorting to large
+         corrective impulses that can violate joint constraints at startup. -->
     <physics name="1ms" type="dart">
       <max_step_size>0.001</max_step_size>
       <real_time_factor>1.0</real_time_factor>
+      <dart>
+        <solver>
+          <iters>200</iters>
+        </solver>
+      </dart>
     </physics>
 
     <!-- Required system plugins for gz-harmonic -->
@@ -73,6 +81,21 @@
               <size>20 20</size>
             </plane>
           </geometry>
+          <!-- Contact softening: prevents large corrective impulses when the
+               robot base is flush with z=0 at startup.
+               max_vel: caps the velocity correction per step (m/s) — the main
+                        knob for killing startup impulses with DART.
+               min_depth: allows up to 1 mm of penetration before generating
+                          a contact force, absorbing numerical noise at the
+                          base/ground interface without an impulse response. -->
+          <surface>
+            <contact>
+              <ode>
+                <max_vel>0.01</max_vel>
+                <min_depth>0.001</min_depth>
+              </ode>
+            </contact>
+          </surface>
         </collision>
         <visual name="visual">
           <geometry>
