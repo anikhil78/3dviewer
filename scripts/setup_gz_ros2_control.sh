@@ -33,7 +33,9 @@ if [ ! -f "/opt/ros/$ROS_DISTRO/setup.bash" ]; then
     exit 1
 fi
 
+set +u
 source "/opt/ros/$ROS_DISTRO/setup.bash"
+set -u
 
 # Check gz-sim 8 is installed
 if ! pkg-config --exists gz-sim8 2>/dev/null; then
@@ -202,7 +204,9 @@ fi
 # --------------------------------------------------------------------------- #
 echo ""
 echo "[STEP 8] Building arctos_description..."
+set +u
 source "$WS/install/setup.bash"
+set -u
 cd "$WS"
 colcon build \
     --symlink-install \
@@ -211,7 +215,9 @@ colcon build \
 
 echo ""
 echo "[STEP 8b] Building arctos_gazebo..."
+set +u
 source "$WS/install/setup.bash"
+set -u
 cd "$WS"
 colcon build \
     --symlink-install \
