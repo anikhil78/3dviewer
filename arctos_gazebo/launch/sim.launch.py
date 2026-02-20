@@ -206,11 +206,21 @@ def generate_launch_description():
 
     # ------------------------------------------------------------------ #
     # Gazebo Harmonic server                                               #
-    # Loads the generated world SDF which already contains the robot.    #
-    # No separate spawn step is needed.                                   #
+    # Started WITHOUT -r so the world is PAUSED on load.                 #
+    # Physics does not integrate while paused, so joints stay at their   #
+    # initial positions (0 rad for all arm joints).                       #
+    #                                                                     #
+    # gz-sim Harmonic still calls PreUpdate/Update/PostUpdate even when   #
+    # paused — gz_ros2_control uses these callbacks to start and update  #
+    # controller_manager.  Controllers therefore become active BEFORE     #
+    # gravity ever acts on the arm.                                       #
+    #                                                                     #
+    # The world is unpaused via a gz service call in on_arm_active,      #
+    # which fires only after arm_controller_spawner exits (confirming    #
+    # arctos_arm_controller is active and commanding the joints).        #
     # ------------------------------------------------------------------ #
     gz_sim = ExecuteProcess(
-        cmd=['gz', 'sim', '-r', world_with_robot_file],
+        cmd=['gz', 'sim', world_with_robot_file],
         output='screen',
         emulate_tty=True,
         additional_env={
@@ -298,12 +308,31 @@ def generate_launch_description():
         output='screen',
     )
 
-    home_after_arm = RegisterEventHandler(
+    # ------------------------------------------------------------------ #
+    # Unpause + optional home — fires when arm_controller_spawner exits  #
+    # (meaning arctos_arm_controller transitioned to active state).      #
+    #                                                                     #
+    # Order matters: unpause FIRST so Gazebo writes the controller's    #
+    # commanded position to the physics engine on the very first step,  #
+    # then the homing trajectory moves the arm to 0 rad over 5 s.      #
+    # ------------------------------------------------------------------ #
+    unpause_world = ExecuteProcess(
+        cmd=[
+            'gz', 'service',
+            '-s', '/world/arctos_world/control',
+            '--reqtype', 'gz.msgs.WorldControl',
+            '--reptype', 'gz.msgs.Boolean',
+            '--timeout', '5000',
+            '--req', 'pause: false',
+        ],
+        output='screen',
+    )
+
+    on_arm_active = RegisterEventHandler(
         OnProcessExit(
             target_action=arm_controller_spawner,
-            on_exit=[homing_cmd],
-        ),
-        condition=IfCondition(LaunchConfiguration('home')),
+            on_exit=[unpause_world, homing_cmd],
+        )
     )
 
     # ------------------------------------------------------------------ #
@@ -370,13 +399,13 @@ def generate_launch_description():
         world_to_base,
         robot_state_publisher,
         gz_sim,
-        # Launch the spawner immediately — it retries internally every ~10 s
-        # until controller_manager is available.  gz_ros2_control typically
-        # registers controller_manager within 2-3 s of Gazebo loading the model,
-        # so the arm is usually under control before any significant droop occurs.
+        # Gazebo starts paused (no -r flag).  Spawn controllers immediately;
+        # the spawner retries until controller_manager is available (typically
+        # within 2-3 s).  Once arm_controller_spawner exits (controllers active)
+        # on_arm_active fires: it unpauses Gazebo and optionally sends homing.
         TimerAction(period=0.0, actions=[joint_state_broadcaster_spawner]),
         spawn_arm_after_jsb,
-        home_after_arm,
+        on_arm_active,
         ros_gz_bridge,
         point_cloud_node,
         rviz2,
