@@ -12,7 +12,7 @@ to the physical arm without code changes.
      WSL2; the SDF-include path bypasses this entirely)
   3. Starts Gazebo Harmonic with the patched world SDF
   4. Starts robot_state_publisher with the same URDF string
-  5. Waits 10 s for Gazebo + gz_ros2_control plugin to initialise, then spawns
+  5. Starts controller spawner immediately; it retries until controller_manager
      controllers in order:
        joint_state_broadcaster  → publishes /joint_states from sim
        arctos_arm_controller    → joint_trajectory_controller (position, 6 DOF)
@@ -32,7 +32,13 @@ Usage:
   ros2 launch arctos_gazebo sim.launch.py
   ros2 launch arctos_gazebo sim.launch.py rviz:=false
 
-Verify controllers after ~15 s:
+Arguments:
+  rviz:=true|false   Launch RViz2 alongside the simulation (default: true)
+  home:=true|false   Send arm to home pose (all joints → 0) once controllers
+                     are active (default: true).  Adjust HOME_POSITIONS below
+                     if your URDF zero pose is not a safe standing configuration.
+
+Verify controllers after ~5 s:
   ros2 control list_controllers
 """
 
@@ -153,6 +159,16 @@ def generate_launch_description():
         description='Launch RViz2 alongside the simulation',
     )
 
+    home_arg = DeclareLaunchArgument(
+        'home',
+        default_value='true',
+        description=(
+            'Send arm to home pose (all joints → 0 rad) once controllers activate. '
+            'Avoids the arm staying in the gravity-fallen pose at startup. '
+            'Set to false if you want the arm to hold wherever physics left it.'
+        ),
+    )
+
     # ------------------------------------------------------------------ #
     # Static TF: world → base_link                                        #
     # robot_state_publisher publishes transforms relative to base_link   #
@@ -211,8 +227,9 @@ def generate_launch_description():
     # ------------------------------------------------------------------ #
     # ros2_control controllers                                             #
     # gz_ros2_control starts controller_manager inside Gazebo when the   #
-    # robot model loads. We wait 10 s for Gazebo + plugin to initialise, #
-    # then spawn controllers in order.                                    #
+    # robot model loads (typically within 2-3 s on this hardware).  The  #
+    # spawner is launched immediately and retries every ~10 s until      #
+    # controller_manager becomes available — no fixed wait needed.       #
     #                                                                     #
     # IMPORTANT: requires gz_ros2_control built against gz-plugin 2.x.   #
     # The apt package ros-humble-gz-ros2-control 0.7.17 is compiled for  #
@@ -249,6 +266,44 @@ def generate_launch_description():
             target_action=joint_state_broadcaster_spawner,
             on_exit=[arm_controller_spawner, hand_controller_spawner],
         )
+    )
+
+    # ------------------------------------------------------------------ #
+    # Homing trajectory                                                    #
+    # Sent once, via ros2 action, immediately after arm_controller_spawner#
+    # exits (which means arctos_arm_controller is active).                #
+    #                                                                     #
+    # Moves all arm joints to 0 rad over 5 s, giving the controller a    #
+    # clean starting pose regardless of where gravity left the arm during #
+    # the uncontrolled startup window.                                    #
+    #                                                                     #
+    # Adjust positions if your URDF zero pose is mechanically unsafe.    #
+    # ------------------------------------------------------------------ #
+    homing_cmd = ExecuteProcess(
+        cmd=[
+            'ros2', 'action', 'send_goal',
+            '/arctos_arm_controller/follow_joint_trajectory',
+            'control_msgs/action/FollowJointTrajectory',
+            (
+                '{trajectory: {'
+                'joint_names: [X_joint, Y_joint, Z_joint, A_joint, B_joint, C_joint],'
+                'points: [{'
+                '  positions: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],'
+                '  velocities: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],'
+                '  time_from_start: {sec: 5, nanosec: 0}'
+                '}]}}'
+            ),
+        ],
+        condition=IfCondition(LaunchConfiguration('home')),
+        output='screen',
+    )
+
+    home_after_arm = RegisterEventHandler(
+        OnProcessExit(
+            target_action=arm_controller_spawner,
+            on_exit=[homing_cmd],
+        ),
+        condition=IfCondition(LaunchConfiguration('home')),
     )
 
     # ------------------------------------------------------------------ #
@@ -311,20 +366,17 @@ def generate_launch_description():
         # per-node additional_env which can fail to propagate in Humble.
         SetEnvironmentVariable('GZ_IP', '127.0.0.1'),
         rviz_arg,
+        home_arg,
         world_to_base,
         robot_state_publisher,
         gz_sim,
-        # Wait 10 s for Gazebo + gz_ros2_control plugin to initialise,
-        # then spawn controllers. The robot is already in the world SDF so
-        # no separate spawn step is needed.
-        # 10 s is sufficient now that gz_ros2_control is built against
-        # gz-plugin 2.x (GzPluginHook) — the plugin loads within 2-3 s on
-        # typical hardware.  Keeping some headroom avoids a race where the
-        # spawner starts before controller_manager has finished registering.
-        # The spawner itself retries every ~10 s if the service is not yet
-        # available, so this value only affects the initial wait.
-        TimerAction(period=10.0, actions=[joint_state_broadcaster_spawner]),
+        # Launch the spawner immediately — it retries internally every ~10 s
+        # until controller_manager is available.  gz_ros2_control typically
+        # registers controller_manager within 2-3 s of Gazebo loading the model,
+        # so the arm is usually under control before any significant droop occurs.
+        TimerAction(period=0.0, actions=[joint_state_broadcaster_spawner]),
         spawn_arm_after_jsb,
+        home_after_arm,
         ros_gz_bridge,
         point_cloud_node,
         rviz2,

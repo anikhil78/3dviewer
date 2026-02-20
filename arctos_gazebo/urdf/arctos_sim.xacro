@@ -161,6 +161,22 @@
   </ros2_control>
 
   <!-- ================================================================== -->
+  <!-- Disable self-collision for the whole robot model                    -->
+  <!--                                                                     -->
+  <!-- Without this, arm links that contact each other during the          -->
+  <!-- uncontrolled startup window (before controllers grab the joints)    -->
+  <!-- trigger DART impulse responses that can be arbitrarily large when   -->
+  <!-- there is penetration depth.  The result is links flying apart       -->
+  <!-- ("fallen apart" appearance) that the controller then holds in place.-->
+  <!--                                                                     -->
+  <!-- Self-collision detection is generally not needed for a serial arm   -->
+  <!-- — MoveIt handles collision avoidance at the planning level.         -->
+  <!-- ================================================================== -->
+  <gazebo>
+    <self_collide>false</self_collide>
+  </gazebo>
+
+  <!-- ================================================================== -->
   <!-- gz_ros2_control system plugin                                        -->
   <!-- NOTE: requires gz_ros2_control built against gz-plugin 2.x          -->
   <!-- (gz-sim 8 / Harmonic). The apt package ros-humble-gz-ros2-control   -->
