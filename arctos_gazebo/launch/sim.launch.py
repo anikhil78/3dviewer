@@ -46,6 +46,7 @@ from launch.actions import (
     DeclareLaunchArgument,
     ExecuteProcess,
     RegisterEventHandler,
+    SetEnvironmentVariable,
     TimerAction,
 )
 from launch.event_handlers import OnProcessExit
@@ -301,6 +302,14 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
+        # Force all child processes (Gazebo, bridge, …) to bind gz-transport
+        # to the loopback interface.  Without this, gz-transport discovery uses
+        # 172.x.x.x (WSL2 virtual NIC) while Gazebo listens on 127.0.0.1, so
+        # the bridge never discovers Gazebo and /camera/image has no subscriber.
+        # SetEnvironmentVariable modifies os.environ of the launch process
+        # itself, so every forked child inherits it — more reliable than
+        # per-node additional_env which can fail to propagate in Humble.
+        SetEnvironmentVariable('GZ_IP', '127.0.0.1'),
         rviz_arg,
         world_to_base,
         robot_state_publisher,
