@@ -153,6 +153,7 @@ def generate_launch_description():
             'OGRE_RTT_MODE': 'Copy',
             'GZ_SIM_RESOURCE_PATH': gz_resource_path,
             'GZ_SIM_SYSTEM_PLUGIN_PATH': gz_plugin_path,
+            'GZ_IP': '127.0.0.1',
         },
     )
 
@@ -172,6 +173,7 @@ def generate_launch_description():
         ],
         output='screen',
         parameters=[{'use_sim_time': True}],
+        additional_env={'GZ_IP': '127.0.0.1'},
     )
 
     # ------------------------------------------------------------------ #
