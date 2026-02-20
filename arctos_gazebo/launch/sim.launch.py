@@ -312,9 +312,15 @@ def generate_launch_description():
     # Unpause + optional home — fires when arm_controller_spawner exits  #
     # (meaning arctos_arm_controller transitioned to active state).      #
     #                                                                     #
-    # Order matters: unpause FIRST so Gazebo writes the controller's    #
-    # commanded position to the physics engine on the very first step,  #
-    # then the homing trajectory moves the arm to 0 rad over 5 s.      #
+    # Order matters:                                                      #
+    #   1. Send homing goal immediately (while world still paused).      #
+    #      The JTC accepts goals even while Gazebo is paused because     #
+    #      gz_ros2_control calls PreUpdate/Update even in pause mode.    #
+    #   2. Wait 3 s to let `ros2 action send_goal` start its subprocess, #
+    #      connect to the action server, and have the goal accepted.     #
+    #   3. Unpause — physics starts with the JTC already tracking a      #
+    #      trajectory, so it outputs non-zero effort on the very first   #
+    #      physics step and gravity never gets a free run at the joints. #
     # ------------------------------------------------------------------ #
     unpause_world = ExecuteProcess(
         cmd=[
@@ -331,7 +337,10 @@ def generate_launch_description():
     on_arm_active = RegisterEventHandler(
         OnProcessExit(
             target_action=arm_controller_spawner,
-            on_exit=[unpause_world, homing_cmd],
+            on_exit=[
+                homing_cmd,  # send goal while still paused
+                TimerAction(period=3.0, actions=[unpause_world]),  # unpause after goal is accepted
+            ],
         )
     )
 

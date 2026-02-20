@@ -43,13 +43,19 @@ arctos_arm_controller:
     # Scale p up if the arm droops under gravity; scale d up if it oscillates.
     # Keep i=0: integral windup is destabilising with DART's stiff contact model.
     # i_clamp bounds the integral term if you ever need i > 0.
+    #
+    # These gains are set ~4x higher than a naive estimate to ensure the arm
+    # holds position from the very first physics step after unpause.  With effort
+    # interface the JTC must counteract gravity purely through PID error signal —
+    # there is no feedforward gravity compensation.  If the arm oscillates, halve
+    # the d gains first; if it still droops, double the p gains.
     gains:
-      X_joint: {p: 500,  i: 0.0, d: 50,  i_clamp: 100.0}
-      Y_joint: {p: 1000, i: 0.0, d: 100, i_clamp: 200.0}
-      Z_joint: {p: 600,  i: 0.0, d: 60,  i_clamp: 150.0}
-      A_joint: {p: 200,  i: 0.0, d: 20,  i_clamp: 50.0}
-      B_joint: {p: 200,  i: 0.0, d: 20,  i_clamp: 50.0}
-      C_joint: {p: 100,  i: 0.0, d: 10,  i_clamp: 20.0}
+      X_joint: {p: 2000,  i: 0.0, d: 150, i_clamp: 100.0}
+      Y_joint: {p: 5000,  i: 0.0, d: 300, i_clamp: 200.0}
+      Z_joint: {p: 3000,  i: 0.0, d: 200, i_clamp: 150.0}
+      A_joint: {p: 1200,  i: 0.0, d: 80,  i_clamp: 50.0}
+      B_joint: {p: 1200,  i: 0.0, d: 80,  i_clamp: 50.0}
+      C_joint: {p: 600,   i: 0.0, d: 40,  i_clamp: 20.0}
 
 arctos_hand_controller:
   ros__parameters:
