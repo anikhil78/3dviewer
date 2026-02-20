@@ -28,7 +28,30 @@
       <plugin>gz_ros2_control/GazeboSimSystem</plugin>
     </hardware>
 
+    <!--
+      PD gains for GazeboSimSystem position control.
+
+      GazeboSimSystem converts position commands to joint forces via a PD
+      loop: force = p*(q_cmd - q) + d*(dq_cmd - dq).  Without these params
+      both gains default to 0 and the controller applies zero force — the
+      arm falls under gravity regardless of what the trajectory controller
+      commands.
+
+      Tuning guide (scale proportionally to link mass × reach²):
+        p  — stiffness.  Too low → arm droops under gravity.
+             Too high → high-frequency oscillation.
+        d  — damping.  ~10 % of p is a safe starting point.
+             Too low → ringing.  Too high → sluggish / overdamped.
+        i  — leave at 0 for simulation; integral windup destabilises DART.
+
+      These gains are SIMULATION-ONLY and have no effect on real hardware.
+    -->
+
+    <!-- X_joint — base yaw: moderate load (whole-arm inertia about vertical) -->
     <joint name="X_joint">
+      <param name="p">500</param>
+      <param name="i">0</param>
+      <param name="d">50</param>
       <command_interface name="position">
         <param name="min">-3.14159265</param>
         <param name="max">3.14159265</param>
@@ -43,7 +66,11 @@
       <state_interface name="velocity"/>
     </joint>
 
+    <!-- Y_joint — shoulder pitch: highest gravity torque, needs stiffest gains -->
     <joint name="Y_joint">
+      <param name="p">1000</param>
+      <param name="i">0</param>
+      <param name="d">100</param>
       <command_interface name="position">
         <param name="min">-0.96</param>
         <param name="max">2.18</param>
@@ -58,7 +85,11 @@
       <state_interface name="velocity"/>
     </joint>
 
+    <!-- Z_joint — elbow pitch: significant gravity torque from forearm + wrist -->
     <joint name="Z_joint">
+      <param name="p">600</param>
+      <param name="i">0</param>
+      <param name="d">60</param>
       <command_interface name="position">
         <param name="min">-1.5708</param>
         <param name="max">0.9599</param>
@@ -73,7 +104,11 @@
       <state_interface name="velocity"/>
     </joint>
 
+    <!-- A_joint — wrist pitch: light load (wrist + gripper only) -->
     <joint name="A_joint">
+      <param name="p">200</param>
+      <param name="i">0</param>
+      <param name="d">20</param>
       <command_interface name="position">
         <param name="min">-1.5708</param>
         <param name="max">1.5708</param>
@@ -88,7 +123,11 @@
       <state_interface name="velocity"/>
     </joint>
 
+    <!-- B_joint — wrist roll: negligible gravity torque, moderate damping -->
     <joint name="B_joint">
+      <param name="p">200</param>
+      <param name="i">0</param>
+      <param name="d">20</param>
       <command_interface name="position">
         <param name="min">-1.55</param>
         <param name="max">1.55</param>
@@ -103,7 +142,11 @@
       <state_interface name="velocity"/>
     </joint>
 
+    <!-- C_joint — tool roll: end-of-chain, very light load -->
     <joint name="C_joint">
+      <param name="p">100</param>
+      <param name="i">0</param>
+      <param name="d">10</param>
       <command_interface name="position">
         <param name="min">-3.14159265</param>
         <param name="max">3.14159265</param>

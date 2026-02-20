@@ -34,6 +34,13 @@ arctos_arm_controller:
     action_monitor_rate: 20.0
     allow_partial_joints_goal: true
     state_tolerance_check: false
+    # open_loop_control: the controller uses its own internal trajectory state
+    # as the reference for the next setpoint rather than reading back actual
+    # joint positions.  This prevents the feedback path from amplifying
+    # physics-simulation noise or timing jitter between the 100 Hz controller
+    # update and the 1 kHz DART physics step, which otherwise causes ringing
+    # or divergence during fast MoveIt trajectories.
+    open_loop_control: true
 
 arctos_hand_controller:
   ros__parameters:
