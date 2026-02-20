@@ -20,8 +20,8 @@
 
   <!-- ================================================================== -->
   <!-- ros2_control block — Gazebo hardware plugin                         -->
-  <!-- Joint definitions mirror arctos.ros2_control.xacro exactly so the  -->
-  <!-- same controllers.yaml works unchanged for real hardware.            -->
+  <!-- Mirrors arctos.ros2_control.xacro (real hardware) interface types  -->
+  <!-- so the same controllers.yaml structure works in both contexts.      -->
   <!-- ================================================================== -->
   <ros2_control name="GazeboSystem" type="system">
     <hardware>
@@ -29,58 +29,72 @@
     </hardware>
 
     <!--
-      Arm joints use EFFORT command interface.
+      Arm joints use POSITION command interface — same as real hardware.
 
-      GazeboSimSystem passes the effort command directly to DART as a joint
-      torque via JointForceCmd — no internal PID, no kinematic tricks.
-      The PID loop (position error → effort) lives in the JointTrajectoryController
-      and is configured in sim_controllers.yaml under gains:.
+      GazeboSimSystem applies position commands via JointPositionReset in
+      DART, which kinematically sets the joint position each physics step.
+      This matches what the real ArctosInterface does (motor servo to a
+      target position).  It is unconditionally stable at startup: the JTC
+      sends q_des=0 from the very first PreUpdate call, so DART never has a
+      chance to let gravity move the joints.  No PID tuning, no gravity
+      compensation, no timing gymnastics required.
 
-      Why NOT position interface?
-        In gz_ros2_control for gz-sim Harmonic, position commands are applied
-        via JointPositionReset, a kinematic teleport.  If DART has accumulated
-        even a small joint velocity beforehand, the teleport creates a large
-        constraint impulse that can violate joint constraints and cause links
-        to fly apart.  Additionally, the <param name="p/d"> values in the URDF
-        <joint> block are a Gazebo Classic artifact — gz_ros2_control ignores them.
-
-      With effort interface, the torque is injected into DART's integrator
-      each step.  Gravity is counteracted by the PID error signal.  No
-      teleportation, no constraint impulse, no flying links.
+      arctos.xacro already contains "world_joint" (fixed, world→base_link)
+      so DART treats the base as rigidly anchored — not free-floating.
+      robot_state_publisher publishes the world→base_link TF automatically
+      from this fixed joint; no separate static_transform_publisher needed.
     -->
 
     <joint name="X_joint">
-      <command_interface name="effort"/>
+      <command_interface name="position">
+        <param name="min">-3.14159</param>
+        <param name="max"> 3.14159</param>
+      </command_interface>
       <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
       <state_interface name="velocity"/>
     </joint>
 
     <joint name="Y_joint">
-      <command_interface name="effort"/>
+      <command_interface name="position">
+        <param name="min">-0.96</param>
+        <param name="max"> 2.18</param>
+      </command_interface>
       <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
       <state_interface name="velocity"/>
     </joint>
 
     <joint name="Z_joint">
-      <command_interface name="effort"/>
+      <command_interface name="position">
+        <param name="min">-1.5708</param>
+        <param name="max"> 0.9599</param>
+      </command_interface>
       <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
       <state_interface name="velocity"/>
     </joint>
 
     <joint name="A_joint">
-      <command_interface name="effort"/>
+      <command_interface name="position">
+        <param name="min">-1.5708</param>
+        <param name="max"> 1.5708</param>
+      </command_interface>
       <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
       <state_interface name="velocity"/>
     </joint>
 
     <joint name="B_joint">
-      <command_interface name="effort"/>
+      <command_interface name="position">
+        <param name="min">-1.55</param>
+        <param name="max"> 1.55</param>
+      </command_interface>
       <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
       <state_interface name="velocity"/>
     </joint>
 
     <joint name="C_joint">
-      <command_interface name="effort"/>
+      <command_interface name="position">
+        <param name="min">-3.14159</param>
+        <param name="max"> 3.14159</param>
+      </command_interface>
       <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
       <state_interface name="velocity"/>
     </joint>

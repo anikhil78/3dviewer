@@ -3,23 +3,30 @@ sim.launch.py
 =============
 Launches a Gazebo Harmonic simulation of the Arctos robot arm with full
 ros2_control — the same joint_trajectory_controller pipeline used on real
-hardware.  This means joint commands tested in simulation transfer directly
-to the physical arm without code changes.
+hardware.  Joint commands tested in simulation transfer directly to the
+physical arm without code changes.
 
   1. Processes arctos_sim.xacro → URDF (at Python level, before launch graph)
   2. Patches arctos_world.sdf to embed the robot via <include> — no gz-transport
      spawn call needed (ros_gz_sim create uses loopback multicast that breaks on
      WSL2; the SDF-include path bypasses this entirely)
-  3. Starts Gazebo Harmonic with the patched world SDF
-  4. Starts robot_state_publisher with the same URDF string
-  5. Starts controller spawner immediately; it retries until controller_manager
-     controllers in order:
+  3. Starts Gazebo Harmonic with the patched world SDF (auto-running via -r)
+  4. Starts robot_state_publisher with the same URDF string.
+     arctos.xacro defines "world_joint" (fixed, world→base_link), so RSP
+     publishes the world→base_link TF automatically — no separate
+     static_transform_publisher needed.
+  5. Spawns controllers in order:
        joint_state_broadcaster  → publishes /joint_states from sim
-       arctos_arm_controller    → joint_trajectory_controller (position, 6 DOF)
+       arctos_arm_controller    → JointTrajectoryController (position, 6 DOF)
        arctos_hand_controller   → GripperActionController (Left_jaw_joint)
   6. Starts ros_gz_bridge for clock + D435 camera topics
   7. Starts depth_image_proc for organised XYZRGB point cloud
   8. Optionally starts RViz2
+
+The arm uses POSITION command interface (matching real hardware ArctosInterface).
+GazeboSimSystem applies JointPositionReset each physics step, kinematically
+holding the arm at the JTC's commanded pose.  The arm cannot fall, droop, or
+fly apart at startup — no timing gymnastics, no homing goal, no delayed unpause.
 
 PREREQUISITE: gz_ros2_control must be built from source against gz-sim 8.
   The apt package ros-humble-gz-ros2-control 0.7.17 is compiled against
@@ -31,12 +38,6 @@ Usage:
   source ~/ros2_ws/install/setup.bash
   ros2 launch arctos_gazebo sim.launch.py
   ros2 launch arctos_gazebo sim.launch.py rviz:=false
-
-Arguments:
-  rviz:=true|false   Launch RViz2 alongside the simulation (default: true)
-  home:=true|false   Send arm to home pose (all joints → 0) once controllers
-                     are active (default: true).  Adjust HOME_POSITIONS below
-                     if your URDF zero pose is not a safe standing configuration.
 
 Verify controllers after ~5 s:
   ros2 control list_controllers
@@ -53,7 +54,6 @@ from launch.actions import (
     ExecuteProcess,
     RegisterEventHandler,
     SetEnvironmentVariable,
-    TimerAction,
 )
 from launch.event_handlers import OnProcessExit
 from launch.conditions import IfCondition
@@ -104,10 +104,7 @@ def generate_launch_description():
         '    <include>\n'
         f'      <uri>file://{urdf_path}</uri>\n'
         '      <name>arctos</name>\n'
-        # 1 mm above ground: prevents the base collision mesh from being exactly
-        # flush with z=0, which causes DART to generate a large corrective impulse
-        # on the very first physics step and blow a joint constraint apart.
-        '      <pose>0 0 0.001 0 0 0</pose>\n'
+        '      <pose>0 0 0 0 0 0</pose>\n'
         '    </include>\n'
         '  '
     )
@@ -162,39 +159,12 @@ def generate_launch_description():
         description='Launch RViz2 alongside the simulation',
     )
 
-    home_arg = DeclareLaunchArgument(
-        'home',
-        default_value='true',
-        description=(
-            'Send arm to home pose (all joints → 0 rad) once controllers activate. '
-            'Avoids the arm staying in the gravity-fallen pose at startup. '
-            'Set to false if you want the arm to hold wherever physics left it.'
-        ),
-    )
-
-    # ------------------------------------------------------------------ #
-    # Static TF: world → base_link                                        #
-    # robot_state_publisher publishes transforms relative to base_link   #
-    # but publishes no world-frame anchor. Without this, RViz2 cannot    #
-    # locate camera_optical_frame (or any robot frame) in the world      #
-    # frame, making the point cloud invisible.                            #
-    # ------------------------------------------------------------------ #
-    world_to_base = Node(
-        package='tf2_ros',
-        executable='static_transform_publisher',
-        name='world_to_base_link',
-        arguments=['0', '0', '0', '0', '0', '0', 'world', 'base_link'],
-        # Do NOT set use_sim_time here: static_transform_publisher will not
-        # publish any transform until it receives a /clock message, creating a
-        # deadlock where RViz2 can never resolve the world frame before Gazebo
-        # is fully up.  Static transforms are time-independent so wall-clock is
-        # correct regardless.
-    )
-
     # ------------------------------------------------------------------ #
     # robot_state_publisher                                                #
-    # Use the already-generated URDF string directly rather than running  #
-    # xacro again via Command substitution.                               #
+    # arctos.xacro defines world_joint (fixed, world→base_link), so RSP  #
+    # publishes the world→base_link TF from the URDF fixed joint.        #
+    # No separate static_transform_publisher is needed or wanted (it      #
+    # would create a duplicate TF warning in RViz2).                      #
     # ------------------------------------------------------------------ #
     robot_state_publisher = Node(
         package='robot_state_publisher',
@@ -209,21 +179,13 @@ def generate_launch_description():
 
     # ------------------------------------------------------------------ #
     # Gazebo Harmonic server                                               #
-    # Started WITHOUT -r so the world is PAUSED on load.                 #
-    # Physics does not integrate while paused, so joints stay at their   #
-    # initial positions (0 rad for all arm joints).                       #
-    #                                                                     #
-    # gz-sim Harmonic still calls PreUpdate/Update/PostUpdate even when   #
-    # paused — gz_ros2_control uses these callbacks to start and update  #
-    # controller_manager.  Controllers therefore become active BEFORE     #
-    # gravity ever acts on the arm.                                       #
-    #                                                                     #
-    # The world is unpaused via a gz service call in on_arm_active,      #
-    # which fires only after arm_controller_spawner exits (confirming    #
-    # arctos_arm_controller is active and commanding the joints).        #
+    # Started with -r so the world runs immediately.                      #
+    # Position interface holds all joints at 0 via JointPositionReset     #
+    # from the very first PreUpdate call — gravity cannot move any joint  #
+    # regardless of when physics starts.  No delayed-unpause needed.      #
     # ------------------------------------------------------------------ #
     gz_sim = ExecuteProcess(
-        cmd=['gz', 'sim', world_with_robot_file],
+        cmd=['gz', 'sim', '-r', world_with_robot_file],
         output='screen',
         emulate_tty=True,
         additional_env={
@@ -241,8 +203,8 @@ def generate_launch_description():
     # ros2_control controllers                                             #
     # gz_ros2_control starts controller_manager inside Gazebo when the   #
     # robot model loads (typically within 2-3 s on this hardware).  The  #
-    # spawner is launched immediately and retries every ~10 s until      #
-    # controller_manager becomes available — no fixed wait needed.       #
+    # spawner is launched immediately and retries until controller_manager #
+    # becomes available — no fixed wait needed.                           #
     #                                                                     #
     # IMPORTANT: requires gz_ros2_control built against gz-plugin 2.x.   #
     # The apt package ros-humble-gz-ros2-control 0.7.17 is compiled for  #
@@ -273,77 +235,11 @@ def generate_launch_description():
         output='screen',
     )
 
-    # Chain: joint_state_broadcaster → arm + hand controllers
+    # Chain: arm + hand controllers spawn after joint_state_broadcaster is confirmed active
     spawn_arm_after_jsb = RegisterEventHandler(
         OnProcessExit(
             target_action=joint_state_broadcaster_spawner,
             on_exit=[arm_controller_spawner, hand_controller_spawner],
-        )
-    )
-
-    # ------------------------------------------------------------------ #
-    # Homing trajectory                                                    #
-    # Sent once, via ros2 action, immediately after arm_controller_spawner#
-    # exits (which means arctos_arm_controller is active).                #
-    #                                                                     #
-    # Moves all arm joints to 0 rad over 5 s, giving the controller a    #
-    # clean starting pose regardless of where gravity left the arm during #
-    # the uncontrolled startup window.                                    #
-    #                                                                     #
-    # Adjust positions if your URDF zero pose is mechanically unsafe.    #
-    # ------------------------------------------------------------------ #
-    homing_cmd = ExecuteProcess(
-        cmd=[
-            'ros2', 'action', 'send_goal',
-            '/arctos_arm_controller/follow_joint_trajectory',
-            'control_msgs/action/FollowJointTrajectory',
-            (
-                '{trajectory: {'
-                'joint_names: [X_joint, Y_joint, Z_joint, A_joint, B_joint, C_joint],'
-                'points: [{'
-                '  positions: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],'
-                '  velocities: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],'
-                '  time_from_start: {sec: 5, nanosec: 0}'
-                '}]}}'
-            ),
-        ],
-        condition=IfCondition(LaunchConfiguration('home')),
-        output='screen',
-    )
-
-    # ------------------------------------------------------------------ #
-    # Unpause + optional home — fires when arm_controller_spawner exits  #
-    # (meaning arctos_arm_controller transitioned to active state).      #
-    #                                                                     #
-    # Order matters:                                                      #
-    #   1. Send homing goal immediately (while world still paused).      #
-    #      The JTC accepts goals even while Gazebo is paused because     #
-    #      gz_ros2_control calls PreUpdate/Update even in pause mode.    #
-    #   2. Wait 3 s to let `ros2 action send_goal` start its subprocess, #
-    #      connect to the action server, and have the goal accepted.     #
-    #   3. Unpause — physics starts with the JTC already tracking a      #
-    #      trajectory, so it outputs non-zero effort on the very first   #
-    #      physics step and gravity never gets a free run at the joints. #
-    # ------------------------------------------------------------------ #
-    unpause_world = ExecuteProcess(
-        cmd=[
-            'gz', 'service',
-            '-s', '/world/arctos_world/control',
-            '--reqtype', 'gz.msgs.WorldControl',
-            '--reptype', 'gz.msgs.Boolean',
-            '--timeout', '5000',
-            '--req', 'pause: false',
-        ],
-        output='screen',
-    )
-
-    on_arm_active = RegisterEventHandler(
-        OnProcessExit(
-            target_action=arm_controller_spawner,
-            on_exit=[
-                homing_cmd,  # send goal while still paused
-                TimerAction(period=3.0, actions=[unpause_world]),  # unpause after goal is accepted
-            ],
         )
     )
 
@@ -402,22 +298,12 @@ def generate_launch_description():
         # to the loopback interface.  Without this, gz-transport discovery uses
         # 172.x.x.x (WSL2 virtual NIC) while Gazebo listens on 127.0.0.1, so
         # the bridge never discovers Gazebo and /camera/image has no subscriber.
-        # SetEnvironmentVariable modifies os.environ of the launch process
-        # itself, so every forked child inherits it — more reliable than
-        # per-node additional_env which can fail to propagate in Humble.
         SetEnvironmentVariable('GZ_IP', '127.0.0.1'),
         rviz_arg,
-        home_arg,
-        world_to_base,
         robot_state_publisher,
         gz_sim,
-        # Gazebo starts paused (no -r flag).  Spawn controllers immediately;
-        # the spawner retries until controller_manager is available (typically
-        # within 2-3 s).  Once arm_controller_spawner exits (controllers active)
-        # on_arm_active fires: it unpauses Gazebo and optionally sends homing.
-        TimerAction(period=0.0, actions=[joint_state_broadcaster_spawner]),
+        joint_state_broadcaster_spawner,
         spawn_arm_after_jsb,
-        on_arm_active,
         ros_gz_bridge,
         point_cloud_node,
         rviz2,
