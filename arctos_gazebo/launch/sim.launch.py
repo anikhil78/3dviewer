@@ -174,7 +174,7 @@ def generate_launch_description():
     # No separate spawn step is needed.                                   #
     # ------------------------------------------------------------------ #
     gz_sim = ExecuteProcess(
-        cmd=['gz', 'sim', '-r', world_with_robot_file],
+        cmd=['gz', 'sim', world_with_robot_file],
         output='screen',
         emulate_tty=True,
         additional_env={
@@ -227,6 +227,28 @@ def generate_launch_description():
         OnProcessExit(
             target_action=joint_state_broadcaster_spawner,
             on_exit=[arm_controller_spawner, hand_controller_spawner],
+        )
+    )
+
+    # Unpause physics only after arm controller is confirmed active.
+    # Gazebo starts paused (no -r) so joints stay at 0 rad until controllers
+    # are ready to command them — prevents the arm falling under gravity.
+    unpause_world = ExecuteProcess(
+        cmd=[
+            'gz', 'service',
+            '-s', '/world/arctos_world/control',
+            '--reqtype', 'gz.msgs.WorldControl',
+            '--reptype', 'gz.msgs.Boolean',
+            '--timeout', '5000',
+            '--req', 'pause: false',
+        ],
+        output='screen',
+    )
+
+    on_arm_active = RegisterEventHandler(
+        OnProcessExit(
+            target_action=arm_controller_spawner,
+            on_exit=[unpause_world],
         )
     )
 
@@ -283,11 +305,13 @@ def generate_launch_description():
         rviz_arg,
         robot_state_publisher,
         gz_sim,
-        # Wait 30 s for Gazebo + gz_ros2_control plugin to initialise,
-        # then spawn controllers. The robot is already in the world SDF so
-        # no separate spawn step is needed.
-        TimerAction(period=30.0, actions=[joint_state_broadcaster_spawner]),
+        # Spawn controllers immediately — the spawner retries internally
+        # until controller_manager is available (typically 2-3 s after Gazebo
+        # loads the model). Gazebo is paused so no physics runs until
+        # on_arm_active fires the unpause after controllers are confirmed active.
+        TimerAction(period=0.0, actions=[joint_state_broadcaster_spawner]),
         spawn_arm_after_jsb,
+        on_arm_active,
         ros_gz_bridge,
         point_cloud_node,
         rviz2,
